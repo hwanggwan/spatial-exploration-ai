@@ -4,7 +4,7 @@
 
 **[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
 
-[![True sensor field beside the predictions and routes from equal allocation, priority allocation, and rollout](demo/preview.png)](https://hwanggwan.github.io/spatial-exploration-ai/)
+[![Animated preview: routes and predicted maps update after each reading. Click to open the interactive demo.](demo/preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/)
 
 The demo runs in your browser. Press **Play** or move the slider to see each new reading update the map. Change the floor plan, start, travel budget, or how strongly walls affect the field to explore **32 archived scenes**. The true field stays beside the predictions; gray dots are the sites reserved for scoring. For offline use, download [the standalone HTML file](demo/index.html) and open it in a browser.
 
