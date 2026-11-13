@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Replay three robot sensing strategies on the same known floor plan and compare how their maps develop.">
+<title>Field Routes — Spatial sensing demo</title>
+<style>
+:root{color-scheme:light;--ink:#172c2b;--muted:#4e6360;--line:#cddbd5;--surface:#fdfdfa;--paper:#f3f6f0;--teal:#225852;--accent:#c7ead0;--mono:ui-monospace,"SFMono-Regular",Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.54 system-ui,-apple-system,sans-serif}
+button,select,input{font:inherit}button,select{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #15836c;outline-offset:3px}button:disabled{cursor:default;opacity:.43}
+.wrap{width:min(1380px,100%);margin:auto;padding-inline:clamp(16px,4vw,54px)}
+header{border-bottom:1px solid var(--line);background:var(--surface)}.mast{height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:720;letter-spacing:-.02em}.mark{width:25px;height:25px;color:#21615a}.tag,.eyebrow,.key,.index{font:650 11px/1.3 var(--mono);letter-spacing:.065em;text-transform:uppercase}.tag{padding:5px 8px;border:1px solid var(--line);border-radius:3px;color:var(--muted)}
+.hero{padding-block:27px 19px;display:flex;align-items:end;justify-content:space-between;gap:20px}.eyebrow{color:var(--teal);margin:0 0 7px}
+h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacing:-.055em;margin:0 0 9px}p{margin:0}.hero p:not(.eyebrow){color:var(--muted);max-width:66ch}.limits{display:flex;gap:8px;white-space:nowrap}.limits span{border:1px solid var(--line);border-radius:4px;padding:7px 9px;font:600 11px var(--mono)}
+.control{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.selects{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}label{min-width:0}.key{display:block;color:var(--muted);margin-bottom:4px}select{width:100%;padding:6px 24px 6px 8px;border:1px solid var(--line);background:#f7faf5;color:var(--ink);border-radius:4px}
+.timeline{display:flex;align-items:center;gap:10px;padding:10px 14px}.timeline button,.layers button{min-height:35px;border:1px solid var(--line);border-radius:4px;background:#f8faf5;color:var(--ink);padding:5px 10px;font-size:13px;font-weight:600}.timeline .play{color:white;background:var(--teal);border-color:var(--teal);min-width:76px}.step{min-width:112px;font:600 12px var(--mono);text-align:right}.timeline input{min-width:65px;flex:1;accent-color:var(--teal);margin:0 4px}
+.viewbar{display:flex;justify-content:space-between;align-items:center;gap:10px 16px;flex-wrap:wrap;margin:16px 0 9px}.layers{display:flex;gap:4px;flex-wrap:wrap}.layers button[aria-pressed=true]{background:#deeee3;border-color:#a1bdb0}.legend{display:flex;align-items:center;gap:8px;font:11px var(--mono);color:var(--muted)}.ramp{width:94px;height:8px;border-radius:2px;background:linear-gradient(90deg,#27648a,#f2efe5,#af4939)}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.plans{display:contents}.card{min-width:0;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--method);border-radius:7px;overflow:hidden}.cardhead{padding:10px 10px 8px}.card h2{font-size:16px;line-height:1.25;letter-spacing:-.018em;margin:0}.name{display:flex;gap:8px;align-items:center}.index{color:var(--method)}.desc{font-size:12px;color:var(--muted);margin-top:3px}.reference{--method:#475e53;background:#f7faf5}.reference .rooms{display:block}.scales{display:flex;gap:8px 18px;flex-wrap:wrap}.legend[hidden]{display:none}.ramp.uncertainty{background:linear-gradient(90deg,#f4f6ec,#373c76)}
+.map{display:block;width:calc(100% - 20px);height:auto;margin:0 10px;border:1px solid #b3c5bc;border-radius:3px;background:#e6efea}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:9px 10px 8px}.stats div{min-width:0}.stats .key{letter-spacing:.02em;line-height:1.2;font-size:10px}.number{font:650 clamp(12px,1.55vw,17px) var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}.rooms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:8px 10px;border-top:1px solid var(--line);color:var(--muted);font-size:11px}.rooms b{color:var(--ink);font:650 12px var(--mono)}
+.mapkey{display:flex;flex-wrap:wrap;gap:5px 15px;margin:10px 0 18px;color:var(--muted);font-size:12px}.mapkey span{display:flex;align-items:center;gap:6px}.symbol{display:inline-block;width:9px;height:9px;background:#ffc751;border:1px solid #18322e}.symbol.stop{border-radius:50%;background:white}.symbol.position{border-radius:50%;background:#18322e}.symbol.test{width:6px;height:6px;border-radius:50%;background:#707d76;border:0}.symbol.wall,.symbol.route{height:2px;width:13px;background:#18322e;border:0}.symbol.route{background:#28776f}
+.notes{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;border-top:1px solid var(--line);padding:14px 0 20px;color:var(--muted);font-size:13px}.notes strong{color:var(--ink)}.notes a{color:var(--teal)}.sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(max-width:1080px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cardhead .desc{min-height:3.08em}
+@media(max-width:850px){.hero{align-items:start;flex-direction:column;gap:10px}.limits{padding-bottom:2px}.cards{gap:8px}.card h2{font-size:14px}.stats .key{font-size:9px}.rooms{gap:2px}}
+@media(max-width:630px){.selects{grid-template-columns:repeat(2,minmax(0,1fr))}.timeline{flex-wrap:wrap}.timeline label{order:2;width:100%;display:flex}.timeline input{margin:0;min-width:0}.step{margin-left:auto}.cards{grid-template-columns:1fr;gap:12px}.card h2{font-size:17px}.desc{min-height:0}.number{font-size:16px}.notes{grid-template-columns:1fr}.hero{padding-top:20px}}
+@media(max-width:630px){.cardhead .desc{min-height:0}}
+@media(max-width:370px){.tag{display:none}.timeline{gap:6px}.timeline label{flex-basis:100%!important}.step{min-width:0}}
+</style>
+</head>
+<body>
+<header><div class="wrap mast"><div class="brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3z M8 3v7m0 4v7m8-18v12m0 3v3 M5 17v-5h6v-6h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="18" cy="6" r="1.4" fill="currentColor"/></svg>Field Routes</div><span class="tag">Spatial exploration lab</span></div></header>
+<main class="wrap">
+<section class="hero" aria-labelledby="title">
+<div><p class="eyebrow">Interactive benchmark replay</p><h1 id="title">Same map. Three routes.</h1><p>Watch where a robot samples on a known floor plan, and how each new reading changes its estimate of an unknown sensor field.</p></div>
+<div class="limits" aria-label="Resource caps"><span>16 readings max</span><span id="travel-cap"></span></div>
+</section>
+<section class="control" aria-label="Replay controls">
+<div class="selects">
+<label><span class="key">Floor plan</span><select id="layout"><option value="0">A · low door, high door</option><option value="1">B · high door, low door</option></select></label>
+<label><span class="key">Start</span><select id="start"><option value="13">A · lower left</option><option value="49">B · lower middle</option><option value="85">C · upper middle</option><option value="121">D · upper left</option></select></label>
+<label><span class="key">Travel budget</span><select id="budget"><option value="loose">Room to explore</option><option value="tight">Tight budget</option></select></label>
+<label><span class="key">Sensor field</span><select id="regime"><option value="barrier">Walls weaken dependence</option><option value="transparent">Dependence crosses walls</option></select></label>
+</div>
+<div class="timeline">
+<button type="button" class="play" id="play">▶ Play</button>
+<button type="button" id="back" aria-label="Previous reading">←</button>
+<button type="button" id="forward" aria-label="Next reading">→</button>
+<button type="button" id="reset">Reset</button>
+<label style="flex:1"><span class="sr">Reading number</span><input id="step" type="range" min="1" max="16" value="1" style="width:100%"></label>
+<output class="step" id="step-label" for="step"></output>
+</div>
+</section>
+<div class="viewbar">
+<div class="layers" role="group" aria-label="Map layer">
+<button type="button" data-layer="mean" aria-pressed="true">Prediction</button>
+<button type="button" data-layer="std" aria-pressed="false">Uncertainty</button>
+</div>
+<div class="scales">
+<div class="legend" aria-label="Sensor value color scale"><span id="scale-min"></span><span class="ramp"></span><span id="scale-max"></span><span>Sensor value</span></div>
+<div class="legend" id="std-scale" aria-label="Uncertainty color scale" hidden><span>0</span><span class="ramp uncertainty"></span><span id="std-max"></span><span>Model std. dev.</span></div>
+</div>
+</div>
+<div class="cards" aria-label="True field and three planning strategies">
+<article class="card reference" aria-labelledby="reference-title">
+<div class="cardhead"><div class="name"><span class="index">Ref</span><h2 id="reference-title">True field</h2></div>
+<p class="desc">Actual sensor field · evaluation only.</p></div>
+<div id="reference-map"></div>
+<p class="rooms">Gray dots mark the 28 hold-out sites.</p>
+</article>
+<div class="plans" id="cards"></div>
+</div>
+<div class="mapkey" aria-label="Map symbols"><span><i class="symbol"></i>Start · first reading</span><span><i class="symbol stop"></i>Measurement stop</span><span><i class="symbol position"></i>Current location</span><span><i class="symbol test"></i>Held-out site</span><span><i class="symbol wall"></i>Wall</span><span><i class="symbol route"></i>Walking path</span></div>
+<div class="notes">
+<p><strong>One mapper, three planners.</strong> All three update the same wall-aware Bayesian ridge model using only readings at their marked stops. The floor plan restricts motion to doors, even when sensor dependence crosses walls.</p>
+<p><strong>How to read the replay.</strong> The timeline aligns reading counts, not travel time. Finished routes stay on their last frame. Hold-out RMSE uses 28 never-sensed sites; uncertainty shows model standard deviation. <a href="../docs/three-room-study.md">Experiment notes</a></p>
+</div>
+<p class="sr" id="status" role="status"></p>
+<noscript><p>Enable JavaScript to play the offline replay.</p></noscript>
+</main>
+<script id="replay-data" type="application/json">__BENCHMARK_REPLAY_DATA__</script>
+<script>
+"use strict";
+const data = JSON.parse(document.querySelector("#replay-data").textContent);
+const methods = [
+  {key:"equal", label:"Equal allocation", desc:"Split readings evenly across selected rooms.", color:"#346e8b"},
+  {key:"priority", label:"Priority allocation", desc:"Favor uncertain rooms that cost less to reach.", color:"#a25432"},
+  {key:"rollout", label:"Rollout", desc:"Compare possible continuations within the budget.", color:"#306c56"}
+];
+const byId = id => document.getElementById(id);
+const cards = byId("cards");
+const controls = ["layout","start","budget","regime"].map(byId);
+const slider = byId("step");
+const play = byId("play");
+let frame=1, layer="mean", interval=null, replay, extent, ceiling;
+const roomOf = site => site%12 < 3 ? 0 : site%12 < 9 ? 1 : 2;
+const cell = site => [site%12, 11-Math.floor(site/12)];
+const center = site => cell(site).map(a=>a+.5);
+const coord = site => center(site).join(",");
+const circle = (site,r,attr) => {
+  const [x,y]=center(site);
+  return `<circle cx="${x}" cy="${y}" r="${r}" ${attr}/>`;
+};
+const mix = (a,b,t) => "rgb("+a.map((v,i)=>Math.round(v+(b[i]-v)*t)).join(",")+")";
+const color = (v,uncertain) => {
+  if(uncertain) return mix([244,246,236],[55,60,118], Math.min(1,v/ceiling));
+  const t=Math.max(-1,Math.min(1,v/extent));
+  return mix([242,239,229],t<0?[39,100,138]:[175,73,57],Math.abs(t));
+};
+function miniMap(values, label, uncertain=false, method=null, plan=null, n=0) {
+  const layout=data.layouts[replay.layout];
+  const squares=values.map((z,i)=>{
+    const [x,y]=cell(i);
+    return `<rect x="${x}" y="${y}" width="1" height="1" fill="${color(z/1000,uncertain)}"/>`;
+  }).join("");
+  const grid=Array.from({length:11},(_,i)=>`M${i+1} 0v12M0 ${i+1}h12`).join("");
+  const walls=layout.doors.map((door,i)=>{
+    const x=i?9:3, y=11-door;
+    return `M${x} 0V${y}M${x} ${y+1}V12`;
+  }).join("");
+  const dots=layout.held.map(s=>circle(s,.092,'fill="#56615e" stroke="#fff" stroke-width=".03" opacity=".85"')).join("");
+  let route="", markers="";
+  if(plan){
+    const seen=plan.sites.slice(0,n), path=plan.walk.slice(0,plan.endpoints[n-1]).map(coord).join(" ");
+    const [x,y]=center(seen[0]), current=seen[n-1];
+    route=`<polyline points="${path}" fill="none" stroke="#fff" stroke-width=".129" stroke-linejoin="round" opacity=".85"/>
+    <polyline points="${path}" fill="none" stroke="${method.color}" stroke-width=".074" stroke-linejoin="round"/>`;
+    markers=seen.slice(1).map(s=>circle(s,.132,`fill="white" stroke="${method.color}" stroke-width=".055"`)).join("")+
+      `<rect x="${x-.155}" y="${y-.155}" width=".31" height=".31" rx=".022" fill="#ffc751" stroke="#1b322c" stroke-width=".05"/>`+
+      (n>1?circle(current,.126,`fill="${method.color}" stroke="white" stroke-width=".05"`):"");
+  }
+  return `<svg class="map" viewBox="0 0 12 12" role="img" aria-label="${label}">
+    ${squares}<path d="${grid}" fill="none" stroke="#ffffff" stroke-width=".018" opacity=".29"/>
+    ${dots}${route}
+    <path d="${walls}" fill="none" stroke="#21322e" stroke-width=".097"/>
+    ${markers}
+  </svg>`;
+}
+function paint() {
+  slider.value=frame;
+  slider.setAttribute("aria-valuetext",`Reading ${frame} of ${slider.max}`);
+  byId("step-label").textContent=`Reading ${frame} / ${slider.max}`;
+  byId("back").disabled=frame<=1;
+  byId("forward").disabled=frame>=Number(slider.max);
+  const std=layer==="std";
+  byId("std-scale").hidden=!std;
+  cards.innerHTML=methods.map((method,i)=>{
+    const plan=replay.plans[method.key], n=Math.min(frame,plan.sites.length);
+    const counts=[0,0,0]; for(const site of plan.sites.slice(0,n)) counts[roomOf(site)]++;
+    const walked=(plan.endpoints[n-1]-1)/11;
+    return `<article class="card" style="--method:${method.color}">
+      <div class="cardhead"><div class="name"><span class="index">0${i+1}</span><h2>${method.label}</h2></div>
+      <p class="desc">${method.desc}</p></div>
+      ${miniMap(plan[layer][n-1], `${method.label}, ${std?"posterior uncertainty":"predicted field"}, ${n} readings`, std, method, plan, n)}
+      <div class="stats"><div><span class="key">Hold-out RMSE</span><span class="number">${plan.rmse[n-1].toFixed(3)}</span></div>
+      <div><span class="key">Distance</span><span class="number">${walked.toFixed(3)}</span></div>
+      <div><span class="key">Readings</span><span class="number">${n} / ${data.count}</span></div></div>
+      <div class="rooms"><span>Left <b>${counts[0]}</b></span><span>Middle <b>${counts[1]}</b></span><span>Right <b>${counts[2]}</b></span></div>
+    </article>`;
+  }).join("");
+}
+function stop(){clearInterval(interval);interval=null;play.textContent="▶ Play";play.setAttribute("aria-label","Play replay");}
+function changeFrame(n, announce=true){
+  frame=Math.max(1,Math.min(Number(slider.max),n));paint();
+  if(announce) byId("status").textContent=`Reading ${frame} of ${slider.max}`;
+}
+function loadCase(){
+  stop();
+  const [layout,start,budget,regime]=controls.map(el=>el.value);
+  replay=data.cases.find(c=>c.layout===Number(layout)&&c.start===Number(start)&&c.budget===budget&&c.regime===regime);
+  if(!replay) throw new Error("Missing replay case");
+  slider.max=Math.max(...Object.values(replay.plans).map(p=>p.sites.length));
+  const predictions=Object.values(replay.plans);
+  extent=Math.max(1,Math.ceil(Math.max(...replay.truth.map(Math.abs),
+    ...predictions.flatMap(p=>p.mean.flat().map(Math.abs)))/1000));
+  ceiling=Math.max(.1,Math.ceil(Math.max(...predictions.flatMap(p=>p.std.flat()))/100)/10);
+  byId("scale-min").textContent=(-extent).toFixed(1);
+  byId("scale-max").textContent=extent.toFixed(1);
+  byId("std-max").textContent=ceiling.toFixed(1);
+  byId("reference-map").innerHTML=miniMap(replay.truth,"True sensor field with held-out sites");
+  byId("travel-cap").textContent=`${data.caps[budget].toFixed(3)} travel cap`;
+  changeFrame(1);
+}
+controls.forEach(el=>el.addEventListener("change",loadCase));
+document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("click",()=>{
+  layer=btn.dataset.layer;
+  document.querySelectorAll("[data-layer]").forEach(b=>b.setAttribute("aria-pressed",String(b===btn)));
+  paint();
+}));
+slider.addEventListener("input",()=>{stop();changeFrame(Number(slider.value));});
+byId("back").addEventListener("click",()=>{stop();changeFrame(frame-1);});
+byId("forward").addEventListener("click",()=>{stop();changeFrame(frame+1);});
+byId("reset").addEventListener("click",()=>{stop();changeFrame(1);});
+play.addEventListener("click",()=>{
+  if(interval!==null){stop();return;}
+  if(frame>=Number(slider.max)) changeFrame(1);
+  play.textContent="Ⅱ Pause";play.setAttribute("aria-label","Pause replay");
+  interval=setInterval(()=>{
+    changeFrame(frame+1,false);
+    if(frame>=Number(slider.max)){stop();byId("status").textContent="Replay complete.";}
+  },430);
+});
+loadCase();
+</script>
+</body>
+</html>

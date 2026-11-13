@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spatial-exploration-ai"
+version = "0.1.0"
+description = "Controlled experiments in spatial mapping and learned exploration"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.23", "matplotlib>=3.6", "scikit-learn>=1.3", "scipy>=1.9"]
+
+[project.optional-dependencies]
+neural = ["torch>=2.3,<3"]
+keras-audit = ["tensorflow==2.20.0", "keras==3.15.1"]
+rl = ["stable-baselines3>=2.3,<3", "sb3-contrib>=2.3,<3"]
+
+[project.scripts]
+spatial-baseline = "spatial_exploration.baseline:main"
+spatial-covariance-study = "spatial_exploration.covariance_study:main"
+spatial-rl-study = "spatial_exploration.rl_study:main"
+spatial-lookahead-study = "spatial_exploration.lookahead_study:main"
+spatial-exact-study = "spatial_exploration.exact_study:main"
+spatial-rollout-study = "spatial_exploration.rollout_study:main"
+spatial-imitation-study = "spatial_exploration.imitation_study:main"
+spatial-robustness-study = "spatial_exploration.robustness_study:main"
+spatial-sample-size-study = "spatial_exploration.sample_size_study:main"
+spatial-deepkriging-study = "spatial_exploration.deepkriging_study:main"
+spatial-transition-study = "spatial_exploration.transition_study:main"
+spatial-resource-study = "spatial_exploration.resource_study:main"
+spatial-uncertainty-study = "spatial_exploration.uncertainty_study:main"
+spatial-basis-study = "spatial_exploration.basis_study:main"
+spatial-cnp-study = "spatial_exploration.cnp_study:main"
+spatial-attention-study = "spatial_exploration.attention_study:main"
+spatial-paper-mapping-study = "spatial_exploration.paper_mapping_study:main"
+spatial-keras-audit-study = "spatial_exploration.keras_audit_study:main"
+spatial-barrier-study = "spatial_exploration.barrier_study:main"
+spatial-barrier-deepkriging-study = "spatial_exploration.barrier_deepkriging_study:main"
+spatial-barrier-ridge-study = "spatial_exploration.barrier_ridge_study:main"
+spatial-wall-topology-study = "spatial_exploration.wall_topology_study:main"
+spatial-wall-closed-loop-study = "spatial_exploration.wall_closed_loop_study:main"
+spatial-wall-rollout-study = "spatial_exploration.wall_rollout_study:main"
+spatial-wall-room-quota-study = "spatial_exploration.wall_room_quota_study:main"
+spatial-three-room-study = "spatial_exploration.three_room_study:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
