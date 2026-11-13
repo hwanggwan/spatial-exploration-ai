@@ -2,11 +2,11 @@
 
 **Where should a robot take its next reading?** Field Routes simulates a robot mapping an unknown sensor field inside a known floor plan. It can walk through doors and take at most 16 noisy readings. The goal is to reconstruct the field as accurately as possible before the travel or sensing budget runs out.
 
-**[Open the demo file](demo/index.html)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
+**[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
 
-![True sensor field beside the predictions and routes from equal allocation, priority allocation, and rollout](demo/preview.png)
+[![True sensor field beside the predictions and routes from equal allocation, priority allocation, and rollout](demo/preview.png)](https://hwanggwan.github.io/spatial-exploration-ai/)
 
-Download `demo/index.html` or clone the repository, then open the file in your browser. No installation or server needed. Press **Play** or move the slider to see each new reading update the map. Change the floor plan, start, travel budget, or how strongly walls affect the field to explore **32 archived scenes**. The true field stays beside the predictions; gray dots are the sites reserved for scoring.
+The demo runs in your browser. Press **Play** or move the slider to see each new reading update the map. Change the floor plan, start, travel budget, or how strongly walls affect the field to explore **32 archived scenes**. The true field stays beside the predictions; gray dots are the sites reserved for scoring. For offline use, download [the standalone HTML file](demo/index.html) and open it in a browser.
 
 ## What we found
 
