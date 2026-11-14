@@ -15,9 +15,10 @@ from spatial_exploration.three_room_study import PRIMARY, design_for
 
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN = "__BENCHMARK_REPLAY_DATA__"
+WORLD_TOKEN = "__WORLD_RENDERER__"
 
 
-def build_data(source):
+def build_data(source, learned_replay=None, rollout_replay=None):
     protocol = json.loads((source / "frozen.json").read_text())
     chosen = {(layout, protocol["test_seed"] + 1000 * layout + offset)
               for layout in range(len(protocol["test_layouts"]))
@@ -39,6 +40,19 @@ def build_data(source):
             if (layout, seed) in chosen and row["method"] in PRIMARY:
                 scores[layout, seed, row["regime"], row["budget"], row["method"]] = float(row["rmse"])
 
+    learned = {}
+    if learned_replay is not None:
+        rows = json.loads(learned_replay.read_text(encoding="utf8"))
+        learned = {(r["layout"], r["seed"], r["regime"], r["budget"]): r for r in rows}
+        if len(learned) != len(rows):
+            raise ValueError("Duplicate learned scene")
+    rollouts = {}
+    if rollout_replay is not None:
+        rows = json.loads(rollout_replay.read_text(encoding="utf8"))
+        records = [r for r in rows if r.get("arm") == "learned_rollout"]
+        rollouts = {(r["layout"], r["seed"], r["regime"], r["budget"]): r for r in records}
+        if len(rollouts) != len(records):
+            raise ValueError("Duplicate rollout scene")
     layouts, cases = [], []
     ridge = protocol["ridge"]
     with np.load(source / "evaluation-only.npz") as archive, threadpool_limits(limits=1):
@@ -81,26 +95,68 @@ def build_data(source):
                             rmse.append(float(np.sqrt(np.mean((belief.mean[held] - truth[held]) ** 2))))
                         np.testing.assert_allclose(rmse[-1], scores[key], atol=1e-12, rtol=0)
                         plans[method] = dict(sites=sites, walk=walk, endpoints=endpoints,
-                                             mean=mean, std=std, rmse=rmse)
+                                             mean=mean, std=std, rmse=rmse,
+                                             readings=[round(value, 3) for _, _, value in steps])
+                    if learned_replay is not None:
+                        record = learned.pop((layout_id, seed, str(regime), budget))
+                        learned_plan = record["plan"]
+                        verify_learned_plan(learned_plan, start, layout, held, truth, protocol["cap"], limit)
+                        plans["learned_world"] = learned_plan
+                    if rollout_replay is not None and budget == "loose":
+                        plan = rollouts.pop((layout_id, seed, str(regime), budget))["plan"]
+                        verify_learned_plan(plan, start, layout, held, truth, protocol["cap"], limit)
+                        plans["learned_rollout"] = plan
                     cases.append(dict(layout=layout_id, start=start, regime=str(regime), budget=budget,
                                       truth=np.rint(truth * 1000).astype(int).tolist(), plans=plans))
+    if learned or rollouts:
+        raise ValueError("Unexpected learned scenes")
     if len(cases) != len(chosen) * len(protocol["regime_permeability"]) * len(protocol["travel_caps"]):
         raise ValueError("Incomplete replay cases")
     return dict(layouts=layouts, cases=cases, caps=protocol["travel_caps"], count=protocol["cap"],
                 starts=protocol["starts"])
 
 
+def verify_learned_plan(plan, start, layout, held, truth, cap, limit):
+    sites, walk, endpoints = (plan[k] for k in ("sites", "walk", "endpoints"))
+    count = len(sites)
+    if (not 1 <= count <= cap or sites[0] != start or walk[0] != start
+            or len(set(sites)) != count or held[sites].any()
+            or (len(walk) - 1) / (layout.size - 1) > limit + 1e-12
+            or len(endpoints) != count or endpoints[0] != 1 or endpoints[-1] != len(walk)
+            or any(a >= b for a, b in zip(endpoints, endpoints[1:]))
+            or [walk[i - 1] for i in endpoints] != sites
+            or not all(layout.movement[u, v] for u, v in zip(walk, walk[1:]))):
+        raise ValueError("Invalid learned route")
+    for key in ("mean", "std"):
+        if np.asarray(plan[key]).shape != (count, len(held)):
+            raise ValueError("Invalid learned map shape")
+    if len(plan["readings"]) != count:
+        raise ValueError("Missing sensor values")
+    if any(k in plan for k in ("forecasts", "futures")) and not all(
+            len(plan.get(k, ())) == count - 1 for k in ("forecasts", "futures")):
+        raise ValueError("Missing action forecasts")
+    rounded = np.asarray(plan["mean"])[:, held] / 1000
+    np.testing.assert_allclose(np.sqrt(np.mean((rounded - truth[held])**2, axis=1)), plan["rmse"],
+                               atol=.0005, rtol=0)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=ROOT / "outputs/three-room-study")
+    parser.add_argument("--learned-replay", type=Path, default=ROOT / "outputs/sensing-world-study/replay.json")
+    parser.add_argument("--rollout-replay", type=Path, default=ROOT / "outputs/sensing-world-rollout/replay.json")
     parser.add_argument("--output", type=Path, default=ROOT / "demo/index.html")
     args = parser.parse_args()
     template = (ROOT / "demo/index.template.html").read_text(encoding="utf8")
     if template.count(TOKEN) != 1:
         raise ValueError("Expected a single replay data placeholder")
-    data = build_data(args.source)
+    if template.count(WORLD_TOKEN) != 1:
+        raise ValueError("Expected a single world renderer placeholder")
+    renderer = (ROOT / "demo/world.js").read_text(encoding="utf8")
+    data = build_data(args.source, args.learned_replay, args.rollout_replay)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(template.replace(TOKEN, json.dumps(data, separators=(",", ":"))), encoding="utf8")
+    html = template.replace(TOKEN, json.dumps(data, separators=(",", ":"))).replace(WORLD_TOKEN, renderer)
+    args.output.write_text(html, encoding="utf8")
     print(f"Exported {len(data['cases'])} paired replays to {args.output}")
 
 

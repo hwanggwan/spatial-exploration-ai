@@ -1,0 +1,278 @@
+// Orthographic 3D replay drawn from the archived grid and walking path.
+const worldCanvas = byId("world-canvas");
+const duelCards = byId("duel-cards");
+duelCards.innerHTML = rolloutMethods.map(m=>`
+  <article class="duel-card" style="--route:${m.color}" aria-labelledby="${m.key}-title">
+    <h2 id="${m.key}-title">${m.label}</h2>
+    <div class="viewport">
+      <canvas id="${m.key}-canvas" role="img" aria-label="${m.label} 3D measurement route"></canvas>
+      <div class="viewport-ui"><span class="viewport-label" data-stat="layer"></span></div>
+      <div class="viewport-bottom"><span></span><span class="sensor-state" data-stat="stage"></span></div>
+    </div>
+    <div class="stats">
+      <div><span class="key">Hold-out RMSE</span><span class="number" data-stat="rmse"></span></div>
+      <div><span class="key">Walking steps</span><span class="number" data-stat="distance"></span></div>
+      <div><span class="key">Readings</span><span class="number" data-stat="readings"></span></div>
+    </div>
+    <div class="rooms" data-stat="rooms"></div>
+  </article>`).join("");
+const duelViews = rolloutMethods.map((method,i)=>{
+  const card=duelCards.children[i];
+  return {method,canvas:card.querySelector("canvas"),
+    stats:Object.fromEntries([...card.querySelectorAll("[data-stat]")].map(el=>[el.dataset.stat,el]))};
+});
+const defaultYaw = -.54, pitch = .71;
+let yaw = defaultYaw, drag = null, liveCursor, duelCursors, futureIndex = null;
+const surfaceLabel = byId("surface-label");
+const sensorState = byId("sensor-state");
+const forecastPanel = byId("world-forecast");
+const forecastValue = byId("forecast-value");
+const forecastDetail = byId("forecast-detail");
+const scenarioControls = byId("scenario-controls");
+const scenarios = [...scenarioControls.querySelectorAll("[data-future]")];
+const forecastSymbol = byId("forecast-symbol");
+const worldOutput = Object.fromEntries(["rmse", "distance", "readings", "reading", "rooms"]
+  .map(key => [key, byId("world-" + key)]));
+
+function paintWorld(cursor) {
+  liveCursor = cursor;
+  const method = methods.find(m => m.key === worldMethod.value);
+  const plan = replay.plans[method.key];
+  const n = Math.min(frame, plan.sites.length);
+  const distance = cursor ?? plan.endpoints[n-1]-1;
+  const wasMoving = cursor !== undefined;
+  const value = plan.readings[n-1];
+  const counts = [0,0,0];
+  for (const site of plan.sites.slice(0,n)) counts[roomOf(site)]++;
+  const future = futureIndex===null ? undefined : plan.futures?.[n-1]?.[futureIndex];
+  const label = future ? (layer === "std" ? "Simulated uncertainty" : "Simulated prediction")
+    : layer === "std" ? "Model uncertainty" : "Predicted field";
+  if (surfaceLabel.textContent !== label) surfaceLabel.textContent = label;
+  const status = wasMoving ? "Moving to next stop" : `Reading ${n} · ${value.toFixed(3)}`;
+  if (sensorState.textContent !== status) sensorState.textContent = status;
+  const fields = {
+    rmse:plan.rmse[n-1].toFixed(3), distance:(distance/11).toFixed(3),
+    readings:`${n} / ${data.count}`, reading:value.toFixed(3)
+  };
+  for (const [key, text] of Object.entries(fields)) {
+    if (worldOutput[key].textContent !== text) worldOutput[key].textContent = text;
+  }
+  const rooms = ["Left","Middle","Right"].map((room,i)=>`<span>${room} <b>${counts[i]}</b></span>`).join("");
+  if (worldOutput.rooms.innerHTML !== rooms) worldOutput.rooms.innerHTML = rooms;
+  const forecast = plan.forecasts?.[n-1];
+  forecastPanel.hidden = !plan.forecasts;
+  forecastSymbol.hidden = !forecast;
+  scenarioControls.hidden = !forecast || !plan.futures;
+  for (const button of scenarios) {
+    const index = button.dataset.future === "" ? null : Number(button.dataset.future);
+    const pressed = String(index === futureIndex);
+    if(button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed",pressed);
+  }
+  const detail = future ? `Simulated reading: ${future.reading.toFixed(3)}`
+    : forecast ? "Mean ± one standard deviation" : "";
+  if(forecastDetail.textContent !== detail) forecastDetail.textContent = detail;
+  if (plan.forecasts) {
+    const text = forecast ? `${forecast[0].toFixed(3)} ± ${forecast[1].toFixed(3)}` : "Route complete";
+    if (forecastValue.textContent !== text) forecastValue.textContent = text;
+  }
+  drawWorld(worldCanvas, data.layouts[replay.layout], plan, n, distance,
+    forecast ? plan.sites[n] : undefined, future?.[layer] ?? plan[layer][n-1]);
+}
+
+function paintDuel(cursors) {
+  duelCursors=cursors;
+  const snapshots=duelViews.map(({method})=>{
+    const plan=replay.plans[method.key];
+    const n=Math.min(frame,plan.sites.length);
+    return {plan,n,measured:new Set(plan.sites.slice(0,n))};
+  });
+  duelViews.forEach(({method,canvas,stats},i)=>{
+    const {plan,n,measured}=snapshots[i];
+    const other=snapshots[1-i].measured;
+    const cursor=cursors?.[i];
+    const distance=cursor ?? plan.endpoints[n-1]-1;
+    const counts=[0,0,0];
+    for(const site of measured) counts[roomOf(site)]++;
+    const values={
+      layer:layer==="std" ? "Model uncertainty" : "Predicted field",
+      stage:cursor!==undefined ? "Moving to next stop" : n===plan.sites.length ? "Route complete" : `Reading ${n}`,
+      distance:`${cursor===undefined ? distance : distance.toFixed(1)} / 26`,
+      rmse:plan.rmse[n-1].toFixed(3), readings:`${n} / ${data.count}`
+    };
+    for(const [key,value] of Object.entries(values)){
+      if(stats[key].textContent!==value) stats[key].textContent=value;
+    }
+    const rooms=["Left","Middle","Right"].map((room,j)=>`<span>${room} <b>${counts[j]}</b></span>`).join("");
+    if(stats.rooms.innerHTML!==rooms) stats.rooms.innerHTML=rooms;
+    const highlight={path:method.path, fill:site=>other.has(site) ? "#fafff5" : method.stop};
+    drawWorld(canvas,data.layouts[replay.layout],plan,n,distance,plan.sites[n],plan[layer][n-1],highlight);
+  });
+}
+
+function drawWorld(canvas, layout, plan, n, distance, target, floor, highlight) {
+  const {clientWidth:width, clientHeight:height} = canvas;
+  const ctx = canvas.getContext("2d");
+  if (!width || !height || !ctx) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (canvas.width !== Math.round(width*dpr) || canvas.height !== Math.round(height*dpr)) {
+    canvas.width = Math.round(width*dpr);
+    canvas.height = Math.round(height*dpr);
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const backdrop = ctx.createRadialGradient(width*.5,height*.45,20,width*.53,height*.57,width*.68);
+  backdrop.addColorStop(0,"#2c4649"); backdrop.addColorStop(1,"#112229");
+  ctx.fillStyle = backdrop; ctx.fillRect(0,0,width,height);
+  const sin = Math.sin(yaw), cos = Math.cos(yaw);
+  const high = Math.sin(pitch), depthScale = Math.cos(pitch);
+  const span = 12*(Math.abs(sin)+Math.abs(cos));
+  const scale = Math.min((width-30)/span, (height-84)/(span*high+1.5));
+  const rotatedX = (x,z) => (x-6)*cos-(z-6)*sin;
+  const depth = (x,z) => (x-6)*sin+(z-6)*cos;
+  const project = ([x,y,z]) => [width*.5+rotatedX(x,z)*scale,
+    height*.53+(depth(x,z)*high-y*depthScale)*scale];
+
+  function trace(vertices) {
+    ctx.beginPath();
+    vertices.forEach((v,i)=> {
+      const point = project(v);
+      if (i) ctx.lineTo(...point);
+      else ctx.moveTo(...point);
+    });
+  }
+  function poly(vertices, fill, stroke, weight=.75) {
+    trace(vertices); ctx.closePath();
+    ctx.fillStyle=fill; ctx.fill();
+    if (stroke) {
+      ctx.strokeStyle=stroke; ctx.lineWidth=weight; ctx.stroke();
+    }
+  }
+  function line(vertices, stroke, weight) {
+    trace(vertices); ctx.strokeStyle=stroke; ctx.lineWidth=weight;
+    ctx.lineJoin="round"; ctx.lineCap="round"; ctx.stroke();
+  }
+  function rect(x0,x1,z0,z1,y) {
+    return [[x0,y,z0],[x1,y,z0],[x1,y,z1],[x0,y,z1]];
+  }
+  function box(x0,x1,z0,z1,y0,y1, colors) {
+    const [a,b,c,d]=rect(x0,x1,z0,z1,y0);
+    const [e,f,g,h]=rect(x0,x1,z0,z1,y1);
+    // Draw the two sides facing the camera, followed by the top.
+    poly(sin>=0?[b,c,g,f]:[d,a,e,h],colors[0]);
+    poly(cos>=0?[c,d,h,g]:[a,b,f,e],colors[1]);
+    poly([e,f,g,h],colors[2]);
+  }
+  function marker(x,z,y,r,fill,stroke) {
+    poly(Array.from({length:18},(_,i)=>{
+      const t=i*Math.PI/9;
+      return [x+r*Math.cos(t),y,z+r*Math.sin(t)];
+    }),fill,stroke,1.25);
+  }
+  // A raised slab, the posterior raster and measurement marks share one geometry.
+  box(-.15,12.15,-.15,12.15,-.42,0,["#243e42","#37535a","#c2d1c8"]);
+  for (let site=0;site<floor.length;site++) {
+    const [x,z]=cell(site);
+    const fill=color(floor[site]/1000,layer==="std");
+    poly(rect(x,x+1,z,z+1,0),fill,fill,1.5);
+  }
+  for(let i=0;i<=12;i++) {
+    line([[i,.012,0],[i,.012,12]],"#1a343027",.75);
+    line([[0,.012,i],[12,.012,i]],"#1a343027",.75);
+  }
+  const path = plan.walk.slice(0,Math.floor(distance)+1).map(center);
+  const last=path[path.length-1], next=center(plan.walk[Math.min(Math.ceil(distance),plan.walk.length-1)]);
+  const fraction=distance-Math.floor(distance);
+  const robot=last.map((v,i)=>v+(next[i]-v)*fraction);
+  const positions=[...path,robot].map(([x,z])=>[x,.035,z]);
+  line(positions,"#f8fff2dd",Math.max(2,scale*.123));
+  line(positions,highlight?.path ?? "#205c50",Math.max(1.4,scale*.067));
+  plan.sites.slice(0,n).forEach((site,i)=>{
+    const [x,z]=center(site);
+    if (i===0) poly(rect(x-.15,x+.15,z-.15,z+.15,.06),"#ffc751","#203732");
+    else marker(x,z,.06,highlight ? .19 : .13,highlight?.fill(site) ?? "#fafff5",highlight?.path ?? "#275750");
+  });
+  if (target !== undefined) {
+    const [x,z]=center(target);
+    ctx.setLineDash([4,3]);
+    marker(x,z,.065,.32,"#f9f4c440","#234841");
+    ctx.setLineDash([]);
+  }
+  const [rx,rz] = robot;
+  if (distance===plan.endpoints[n-1]-1) {
+    marker(rx,rz,.066,.44,"#e1f49c64","#e8f8b6");
+  }
+
+  const objects=[];
+  const add=(x,z,draw)=>objects.push({depth:depth(x,z),draw});
+  // Door openings are the same unit intervals used by the benchmark.
+  layout.doors.forEach((door,i)=>{
+    const x=i?9:3, opening=11-door;
+    for(let z=0;z<12;z++) {
+      if (z===opening) {
+        poly(rect(x-.14,x+.14,z+.045,z+.955,.038),"#f9f4c482");
+        continue;
+      }
+      add(x,z+.5,()=>box(x-.095,x+.095,z,z+1,.006,1.17,["#5c7473","#768e88","#c3d4c7"]));
+    }
+  });
+  // Low borders keep the floor visible when the camera orbits.
+  for (let i=0;i<12;i++) {
+    add(i+.5,0,()=>box(i,i+1,-.11,0,0,.27,["#53716f","#698681","#bad2c7"]));
+    add(i+.5,12,()=>box(i,i+1,12,12.11,0,.27,["#53716f","#698681","#bad2c7"]));
+    add(0,i+.5,()=>box(-.11,0,i,i+1,0,.27,["#53716f","#698681","#bad2c7"]));
+    add(12,i+.5,()=>box(12,12.11,i,i+1,0,.27,["#53716f","#698681","#bad2c7"]));
+  }
+  add(rx,rz,()=>{
+    marker(rx,rz,.07,.35,"#182e37a0");
+    box(rx-.275,rx+.275,rz-.23,rz+.23,.09,.20,["#12252d","#192e35","#385054"]);
+    box(rx-.235,rx+.235,rz-.195,rz+.195,.19,.44,["#51746f","#84aca0","#e2f1de"]);
+    box(rx-.106,rx+.106,rz-.11,rz+.11,.44,.55,["#658e81","#a0bca2","#fae88a"]);
+    marker(rx,rz,.557,.062,"#285e50");
+  });
+  objects.sort((a,b)=>a.depth-b.depth);
+  objects.forEach(object=>object.draw());
+}
+
+function redrawWorld() {
+  if(!replay) return;
+  if(displayMode==="duel") paintDuel(duelCursors);
+  if(displayMode==="world") paintWorld(liveCursor);
+}
+
+function orbit(delta) {
+  yaw+=delta;
+  redrawWorld();
+}
+
+const observer = new ResizeObserver(redrawWorld);
+for (const canvas of [worldCanvas, ...duelViews.map(view=>view.canvas)]) {
+  observer.observe(canvas);
+  canvas.addEventListener("pointerdown",event=>{
+    if (event.button!==0 || drag) return;
+    drag={id:event.pointerId,x:event.clientX,canvas};
+    canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener("pointermove",event=>{
+    if(drag?.canvas!==canvas || drag.id!==event.pointerId) return;
+    orbit((event.clientX-drag.x)*.009);
+    drag.x=event.clientX;
+  });
+  canvas.addEventListener("lostpointercapture",event=>{
+    if(drag?.canvas===canvas && drag.id===event.pointerId) drag=null;
+  });
+}
+byId("orbit-left").addEventListener("click",()=>orbit(-.27));
+byId("orbit-right").addEventListener("click",()=>orbit(.27));
+byId("orbit-reset").addEventListener("click",()=>orbit(defaultYaw-yaw));
+for(const button of document.querySelectorAll("[data-orbit]")){
+  button.addEventListener("click",()=>orbit(button.dataset.orbit==="reset" ? defaultYaw-yaw : Number(button.dataset.orbit)));
+}
+
+for (const button of scenarios) {
+  button.addEventListener("click",()=>{
+    const index = Math.min(frame, replay.plans[worldMethod.value].sites.length)-1;
+    if(!replay.plans[worldMethod.value].futures?.[index]) return;
+    stop();
+    futureIndex = button.dataset.future === "" ? null : Number(button.dataset.future);
+    paint();
+  });
+}

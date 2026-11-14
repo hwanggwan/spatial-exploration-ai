@@ -16,6 +16,13 @@ class MeasurementPlan:
     sequences_evaluated: int
 
 
+def mean_variance_reduction(covariance, noise_variance, candidates):
+    """Mean reduction in grid variance after one noisy reading per candidate."""
+    cross = covariance[:, candidates]
+    denominators = np.diag(covariance)[candidates] + noise_variance
+    return np.mean(cross * cross, axis=0) / denominators
+
+
 def plan_measurements(covariance, distances, current, visited, allowed,
                       remaining_budget, noise_variance, depth=2):
     """Maximize whole-grid variance reduction per distance over one/two moves.
@@ -35,9 +42,7 @@ def plan_measurements(covariance, distances, current, visited, allowed,
     if not len(first_candidates):
         raise RuntimeError("No feasible measurement remains")
     count = len(covariance)
-    cross = covariance[:, first_candidates]
-    denominators = np.diag(covariance)[first_candidates] + noise_variance
-    first_gains = np.mean(cross * cross, axis=0) / denominators
+    first_gains = mean_variance_reduction(covariance, noise_variance, first_candidates)
     best_plan, sequences = None, 0
     for offset, first in enumerate(first_candidates):
         first = int(first)
@@ -48,11 +53,10 @@ def plan_measurements(covariance, distances, current, visited, allowed,
         second_candidates = np.flatnonzero(available & (np.arange(count) != first) & (
             distances[first] <= remaining_budget - first_cost + 1e-12)) if depth == 2 else np.array([], dtype=int)
         if len(second_candidates):
-            vector = cross[:, offset]
-            hypothetical = covariance - np.outer(vector, vector) / denominators[offset]
-            second_cross = hypothetical[:, second_candidates]
-            second_gains = np.mean(second_cross * second_cross, axis=0) / (
-                np.diag(hypothetical)[second_candidates] + noise_variance)
+            vector = covariance[:, first]
+            denominator = covariance[first, first] + noise_variance
+            hypothetical = covariance - np.outer(vector, vector) / denominator
+            second_gains = mean_variance_reduction(hypothetical, noise_variance, second_candidates)
             costs = first_cost + distances[first, second_candidates]
             gains = first_gain + second_gains
             scores = gains / costs

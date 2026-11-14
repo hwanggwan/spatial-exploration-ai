@@ -20,7 +20,7 @@ class RolloutPlan:
 
 
 def plan_rollout(covariance, distances, current, visited, allowed,
-                 remaining_budget, noise_variance, *, remaining_observations=None):
+                 remaining_budget, noise_variance, *, remaining_observations=None, terminal_variance=None):
     """Try every feasible first move, then run greedy to a terminal state.
 
     Minimize the resulting *final* whole-grid mean posterior variance, stopping
@@ -33,7 +33,9 @@ def plan_rollout(covariance, distances, current, visited, allowed,
     Covariance is already conditioned on all visited sites. No future measured
     values or latent field are used. No candidate truncation or tail cutoff is
     applied. With an exact fixed covariance model, full feasible actions and
-    exact arithmetic, repeated rollout cannot do worse than the base policy.
+    exact arithmetic, repeated rollout cannot do worse than the base policy
+    under the default Gaussian terminal score. A custom terminal variance can
+    rescore each greedy completion, excluding the already measured start.
     This is a policy-improvement property, not a global optimality claim.
     """
     covariance = np.asarray(covariance, dtype=float)
@@ -98,7 +100,10 @@ def plan_rollout(covariance, distances, current, visited, allowed,
                 break
             action = plan_measurements(posterior, distances, action, hypothetical_visited,
                 allowed, remaining_budget - travel, noise_variance, depth=1).first
-        variance = float(np.trace(posterior) / count)
+        if terminal_variance is None:
+            variance = float(np.trace(posterior) / count)
+        else:
+            variance = terminal_variance(tuple(route[1:]))
         if first == base_first:
             greedy_route, greedy_variance = tuple(route), variance
         if best is None or variance < best[0] - 1e-12:

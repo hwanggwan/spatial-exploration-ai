@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Replay three robot sensing strategies on the same known floor plan and compare how their maps develop.">
+<meta name="description" content="Replay Bayesian and learned robot sensing strategies on a known floor plan.">
 <title>Field Routes — Spatial sensing demo</title>
 <style>
 :root{color-scheme:light;--ink:#172c2b;--muted:#4e6360;--line:#cddbd5;--surface:#fdfdfa;--paper:#f3f6f0;--teal:#225852;--accent:#c7ead0;--mono:ui-monospace,"SFMono-Regular",Consolas,monospace}
@@ -18,32 +18,64 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 .selects{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}label{min-width:0}.key{display:block;color:var(--muted);margin-bottom:4px}select{width:100%;padding:6px 24px 6px 8px;border:1px solid var(--line);background:#f7faf5;color:var(--ink);border-radius:4px}
 .timeline{display:flex;align-items:center;gap:10px;padding:10px 14px}.timeline button,.layers button{min-height:35px;border:1px solid var(--line);border-radius:4px;background:#f8faf5;color:var(--ink);padding:5px 10px;font-size:13px;font-weight:600}.timeline .play{color:white;background:var(--teal);border-color:var(--teal);min-width:76px}.step{min-width:112px;font:600 12px var(--mono);text-align:right}.timeline input{min-width:65px;flex:1;accent-color:var(--teal);margin:0 4px}
 .viewbar{display:flex;justify-content:space-between;align-items:center;gap:10px 16px;flex-wrap:wrap;margin:16px 0 9px}.layers{display:flex;gap:4px;flex-wrap:wrap}.layers button[aria-pressed=true]{background:#deeee3;border-color:#a1bdb0}.legend{display:flex;align-items:center;gap:8px;font:11px var(--mono);color:var(--muted)}.ramp{width:94px;height:8px;border-radius:2px;background:linear-gradient(90deg,#27648a,#f2efe5,#af4939)}
-.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.plans{display:contents}.card{min-width:0;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--method);border-radius:7px;overflow:hidden}.cardhead{padding:10px 10px 8px}.card h2{font-size:16px;line-height:1.25;letter-spacing:-.018em;margin:0}.name{display:flex;gap:8px;align-items:center}.index{color:var(--method)}.desc{font-size:12px;color:var(--muted);margin-top:3px}.reference{--method:#475e53;background:#f7faf5}.reference .rooms{display:block}.scales{display:flex;gap:8px 18px;flex-wrap:wrap}.legend[hidden]{display:none}.ramp.uncertainty{background:linear-gradient(90deg,#f4f6ec,#373c76)}
+.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.plans{display:contents}.card{min-width:0;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--method);border-radius:7px;overflow:hidden}.cardhead{padding:10px 10px 8px}.card h2{font-size:16px;line-height:1.25;letter-spacing:-.018em;margin:0}.name{display:flex;gap:8px;align-items:center}.index{color:var(--method)}.desc{font-size:12px;color:var(--muted);margin-top:3px}.reference{--method:#475e53;background:#f7faf5}.reference .rooms{display:block}.scales{display:flex;gap:8px 18px;flex-wrap:wrap}.legend[hidden]{display:none}.ramp.uncertainty{background:linear-gradient(90deg,#f4f6ec,#373c76)}
 .map{display:block;width:calc(100% - 20px);height:auto;margin:0 10px;border:1px solid #b3c5bc;border-radius:3px;background:#e6efea}
 .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:9px 10px 8px}.stats div{min-width:0}.stats .key{letter-spacing:.02em;line-height:1.2;font-size:10px}.number{font:650 clamp(12px,1.55vw,17px) var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}.rooms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:8px 10px;border-top:1px solid var(--line);color:var(--muted);font-size:11px}.rooms b{color:var(--ink);font:650 12px var(--mono)}
 .mapkey{display:flex;flex-wrap:wrap;gap:5px 15px;margin:10px 0 18px;color:var(--muted);font-size:12px}.mapkey span{display:flex;align-items:center;gap:6px}.symbol{display:inline-block;width:9px;height:9px;background:#ffc751;border:1px solid #18322e}.symbol.stop{border-radius:50%;background:white}.symbol.position{border-radius:50%;background:#18322e}.symbol.test{width:6px;height:6px;border-radius:50%;background:#707d76;border:0}.symbol.wall,.symbol.route{height:2px;width:13px;background:#18322e;border:0}.symbol.route{background:#28776f}
 .notes{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;border-top:1px solid var(--line);padding:14px 0 20px;color:var(--muted);font-size:13px}.notes strong{color:var(--ink)}.notes a{color:var(--teal)}.sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-@media(max-width:1080px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1180px){.cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:850px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .cardhead .desc{min-height:3.08em}
 @media(max-width:850px){.hero{align-items:start;flex-direction:column;gap:10px}.limits{padding-bottom:2px}.cards{gap:8px}.card h2{font-size:14px}.stats .key{font-size:9px}.rooms{gap:2px}}
 @media(max-width:630px){.selects{grid-template-columns:repeat(2,minmax(0,1fr))}.timeline{flex-wrap:wrap}.timeline label{order:2;width:100%;display:flex}.timeline input{margin:0;min-width:0}.step{margin-left:auto}.cards{grid-template-columns:1fr;gap:12px}.card h2{font-size:17px}.desc{min-height:0}.number{font-size:16px}.notes{grid-template-columns:1fr}.hero{padding-top:20px}}
 @media(max-width:630px){.cardhead .desc{min-height:0}}
 @media(max-width:370px){.tag{display:none}.timeline{gap:6px}.timeline label{flex-basis:100%!important}.step{min-width:0}}
+[hidden]{display:none!important}
+.viewmodo{display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap}
+.viewmodo .layers:first-child button[aria-pressed=true]{background:var(--teal);border-color:var(--teal);color:white}
+.world{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,310px);gap:14px}
+.viewport{position:relative;min-width:0;min-height:450px;height:clamp(450px,53vw,570px);overflow:hidden;isolation:isolate;background:#13252b;border:1px solid #223a3d;border-radius:9px;color:#e2ece6}
+.viewport canvas{position:absolute;width:100%;height:100%;inset:0;touch-action:pan-y;cursor:grab}.viewport canvas:active{cursor:grabbing}
+.viewport-ui,.viewport-bottom{position:absolute;left:18px;right:18px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;pointer-events:none}
+.viewport-ui{top:15px}.viewport-bottom{bottom:12px;align-items:flex-end;color:#b8cbc1;font:12px var(--mono)}
+.viewport-label{border:1px solid #476262;border-radius:4px;padding:5px 7px;background:#142830d9;color:#e9f5ed;font:650 11px var(--mono);letter-spacing:.055em;text-transform:uppercase}
+.camera{display:flex;gap:4px;pointer-events:auto}.camera button{min-width:35px;min-height:35px;background:#21363d;color:#e6f0ea;border:1px solid #4a6266;border-radius:4px;font-size:16px;padding:0 6px}.camera button:hover{background:#344f55}
+.sensor-state{background:#142830d9;border-radius:4px;padding:5px 8px;color:#e1f4e8}
+.world-info{min-width:0;display:flex;flex-direction:column;gap:10px}.world-panel{background:var(--surface);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.world-panel .map{max-width:194px;margin:0 auto 10px}.world-panel .cardhead{padding:11px 12px}.world-panel h2{margin:0;font-size:16px;letter-spacing:-.015em}
+.world-metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 12px 10px}.world-metrics .key{letter-spacing:.02em;font-size:10px}
+.world-metrics .number{font-size:16px}.forecast{padding:9px 12px;border-top:1px solid var(--line)}.forecast .desc{min-height:0;margin-top:2px}.forecast .layers{margin-top:8px}.forecast .layers button{min-height:30px;font-size:12px;padding-inline:8px}.symbol.next{border:1px dashed #285e50;border-radius:50%;background:transparent}.world-field .desc{min-height:0!important}.world-field .rooms{display:block;padding:7px 12px}
+@media(max-width:760px){.world{grid-template-columns:1fr}.viewport{min-height:360px;height:clamp(360px,71vw,540px)}.world-info{display:grid;grid-template-columns:1fr 1fr}.world-panel .map{max-width:154px}.viewport-bottom{font-size:11px}}
+@media(max-width:450px){.viewport{height:345px;min-height:345px}.viewport-ui,.viewport-bottom{left:10px;right:10px}.viewport-bottom{bottom:8px}.viewport-ui{top:9px}.camera button{min-height:32px;min-width:32px}.world-info{grid-template-columns:1fr}.world-panel .map{max-width:180px}}
+/* Synchronized rollout comparison */
+.duel-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.duel-top p{font-size:13px;color:var(--muted)}
+.duel-camera button{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.duel-camera button:hover{background:#deeee3}
+.duel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.duel-card{border:1px solid var(--line);border-top:3px solid var(--route);border-radius:8px;overflow:hidden;background:var(--surface)}
+.duel-card h2{margin:0;padding:10px 12px;font-size:17px;letter-spacing:-.025em}
+.duel-card .viewport{border:0;border-radius:0;min-height:0;height:clamp(280px,34vw,465px)}
+.duel-card .stats{padding:9px 12px 10px;grid-template-columns:repeat(3,minmax(0,1fr));row-gap:8px}
+.duel-card .rooms{padding-inline:12px}
+.duel-key .world-only{background:#ad7ed7}.duel-key .gp-only{background:#44ab9b}
+.duel-key .both{background:white}
+@media(max-width:760px){.duel-grid{grid-template-columns:1fr}.duel-card .viewport{height:clamp(250px,57vw,390px)}}
 </style>
 </head>
 <body>
 <header><div class="wrap mast"><div class="brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3z M8 3v7m0 4v7m8-18v12m0 3v3 M5 17v-5h6v-6h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="18" cy="6" r="1.4" fill="currentColor"/></svg>Field Routes</div><span class="tag">Spatial exploration lab</span></div></header>
 <main class="wrap">
 <section class="hero" aria-labelledby="title">
-<div><p class="eyebrow">Interactive benchmark replay</p><h1 id="title">Same map. Three routes.</h1><p>Watch where a robot samples on a known floor plan, and how each new reading changes its estimate of an unknown sensor field.</p></div>
+<div><p class="eyebrow">Interactive benchmark replay</p><h1 id="title">Mapping an unknown field</h1><p>Compare where two robot planners stop to measure the same field and how each reading updates their maps.</p></div>
 <div class="limits" aria-label="Resource caps"><span>16 readings max</span><span id="travel-cap"></span></div>
 </section>
 <section class="control" aria-label="Replay controls">
 <div class="selects">
-<label><span class="key">Floor plan</span><select id="layout"><option value="0">A · low door, high door</option><option value="1">B · high door, low door</option></select></label>
+<label><span class="key">Floor plan</span><select id="layout"><option value="0">A · low / high</option><option value="1">B · high / low</option></select></label>
 <label><span class="key">Start</span><select id="start"><option value="13">A · lower left</option><option value="49">B · lower middle</option><option value="85">C · upper middle</option><option value="121">D · upper left</option></select></label>
-<label><span class="key">Travel budget</span><select id="budget"><option value="loose">Room to explore</option><option value="tight">Tight budget</option></select></label>
-<label><span class="key">Sensor field</span><select id="regime"><option value="barrier">Walls weaken dependence</option><option value="transparent">Dependence crosses walls</option></select></label>
+<label><span class="key">Travel budget</span><select id="budget"><option value="loose">26 walking steps</option><option value="tight">18 walking steps</option></select></label>
+<label><span class="key">Sensor field</span><select id="regime"><option value="barrier">Weak across walls</option><option value="transparent">Strong across walls</option></select></label>
 </div>
 <div class="timeline">
 <button type="button" class="play" id="play">▶ Play</button>
@@ -55,16 +87,80 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 </div>
 </section>
 <div class="viewbar">
+<div class="viewmodo">
+<div class="layers" role="group" aria-label="Display mode">
+<button type="button" data-view="duel" aria-pressed="true">3D rollout comparison</button>
+<button type="button" data-view="world" aria-pressed="false">3D world</button>
+<button type="button" data-view="compare" aria-pressed="false">Compare maps</button>
+</div>
 <div class="layers" role="group" aria-label="Map layer">
 <button type="button" data-layer="mean" aria-pressed="true">Prediction</button>
 <button type="button" data-layer="std" aria-pressed="false">Uncertainty</button>
+</div>
 </div>
 <div class="scales">
 <div class="legend" aria-label="Sensor value color scale"><span id="scale-min"></span><span class="ramp"></span><span id="scale-max"></span><span>Sensor value</span></div>
 <div class="legend" id="std-scale" aria-label="Uncertainty color scale" hidden><span>0</span><span class="ramp uncertainty"></span><span id="std-max"></span><span>Model std. dev.</span></div>
 </div>
 </div>
-<div class="cards" aria-label="True field and three planning strategies">
+<section id="duel" aria-label="Side-by-side 3D rollout comparison">
+<div class="duel-top">
+<p>Drag either view to rotate both. The timeline advances both routes by reading number.</p>
+<div class="camera duel-camera" role="group" aria-label="Shared camera">
+<button type="button" data-orbit="-0.27" aria-label="Rotate both views left">↶</button>
+<button type="button" data-orbit="0.27" aria-label="Rotate both views right">↷</button>
+<button type="button" data-orbit="reset" aria-label="Reset both cameras">⌂</button>
+</div>
+</div>
+<div class="duel-grid" id="duel-cards"></div>
+</section>
+<div id="duel-key" class="mapkey duel-key" aria-label="Rollout route symbols">
+<span><i class="symbol"></i>Shared start</span>
+<span><i class="symbol stop both"></i>Measured by both so far</span>
+<span><i class="symbol stop world-only"></i>World model only</span>
+<span><i class="symbol stop gp-only"></i>GP only</span>
+<span><i class="symbol next"></i>Next stop</span>
+</div>
+<section class="world" id="world" aria-label="3D sensing replay" hidden>
+<div class="viewport">
+<canvas id="world-canvas" role="img" aria-label="3D floor plan with a robot following the archived measurement route"></canvas>
+<div class="viewport-ui">
+<span class="viewport-label" id="surface-label">Predicted field</span>
+<div class="camera" role="group" aria-label="Camera">
+<button type="button" id="orbit-left" aria-label="Rotate view left">↶</button>
+<button type="button" id="orbit-right" aria-label="Rotate view right">↷</button>
+<button type="button" id="orbit-reset" aria-label="Reset camera">⌂</button>
+</div>
+</div>
+<div class="viewport-bottom"><span>Drag to orbit</span><span class="sensor-state" id="sensor-state"></span></div>
+</div>
+<aside class="world-info" aria-label="Route and reference">
+<div class="world-panel">
+<div class="cardhead"><label><span class="key">Planner</span><select id="world-method"></select></label></div>
+<div class="world-metrics">
+<div><span class="key">Hold-out RMSE</span><span class="number" id="world-rmse"></span></div>
+<div><span class="key">Distance</span><span class="number" id="world-distance"></span></div>
+<div><span class="key">Readings</span><span class="number" id="world-readings"></span></div>
+<div><span class="key">Latest reading</span><span class="number" id="world-reading"></span></div>
+</div>
+<div class="forecast" id="world-forecast" hidden><span class="key">Next reading forecast</span><span class="number" id="forecast-value"></span><p class="desc" id="forecast-detail">Mean ± one standard deviation</p>
+<div class="layers" id="scenario-controls" role="group" aria-label="Preview a possible reading">
+<button type="button" data-future="" aria-pressed="true">Current</button>
+<button type="button" data-future="0" aria-pressed="false">Low</button>
+<button type="button" data-future="1" aria-pressed="false">Mean</button>
+<button type="button" data-future="2" aria-pressed="false">High</button>
+</div></div>
+<div class="rooms" id="world-rooms"></div>
+</div>
+<div class="world-panel world-field">
+<div class="cardhead"><h2>True field</h2><p class="desc">Actual sensor field · evaluation only.</p></div>
+<div id="world-reference"></div>
+<p class="rooms">Gray dots mark the 28 hold-out sites.</p>
+</div>
+</aside>
+</section>
+<div id="world-key" class="mapkey" aria-label="3D map symbols" hidden><span><i class="symbol"></i>Start</span><span><i class="symbol stop"></i>Measurement stop</span><span id="forecast-symbol"><i class="symbol next"></i>Next stop</span><span><i class="symbol route"></i>Walking path</span></div>
+<div id="compare" class="cards" aria-label="True field and planning strategies" hidden>
 <article class="card reference" aria-labelledby="reference-title">
 <div class="cardhead"><div class="name"><span class="index">Ref</span><h2 id="reference-title">True field</h2></div>
 <p class="desc">Actual sensor field · evaluation only.</p></div>
@@ -73,10 +169,10 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 </article>
 <div class="plans" id="cards"></div>
 </div>
-<div class="mapkey" aria-label="Map symbols"><span><i class="symbol"></i>Start · first reading</span><span><i class="symbol stop"></i>Measurement stop</span><span><i class="symbol position"></i>Current location</span><span><i class="symbol test"></i>Held-out site</span><span><i class="symbol wall"></i>Wall</span><span><i class="symbol route"></i>Walking path</span></div>
+<div class="mapkey" id="compare-key" aria-label="Map symbols" hidden><span><i class="symbol"></i>Start · first reading</span><span><i class="symbol stop"></i>Measurement stop</span><span><i class="symbol position"></i>Current location</span><span><i class="symbol test"></i>Held-out site</span><span><i class="symbol wall"></i>Wall</span><span><i class="symbol route"></i>Walking path</span></div>
 <div class="notes">
-<p><strong>One mapper, three planners.</strong> All three update the same wall-aware Bayesian ridge model using only readings at their marked stops. The floor plan restricts motion to doors, even when sensor dependence crosses walls.</p>
-<p><strong>How to read the replay.</strong> The timeline aligns reading counts, not travel time. Finished routes stay on their last frame. Hold-out RMSE uses 28 never-sensed sites; uncertainty shows model standard deviation. <a href="../docs/three-room-study.md">Experiment notes</a></p>
+<p><strong>Bayesian and learned sensing.</strong> Equal, priority and GP rollout share the wall-aware Bayesian ridge mapper. The learned world model fits spatial patterns from simulated sensor data and plans under several possible next readings. Both use the known floor plan. <a href="../docs/sensing-world-study.md">World-model comparison</a></p>
+<p><strong>How to read the replay.</strong> The timeline aligns reading counts. In 3D, the robot walks each archived path between readings. Finished routes stay on their last frame. Hold-out RMSE uses 28 never-sensed sites; uncertainty shows model standard deviation. <a href="../docs/three-room-study.md">Experiment notes</a></p>
 </div>
 <p class="sr" id="status" role="status"></p>
 <noscript><p>Enable JavaScript to play the offline replay.</p></noscript>
@@ -88,14 +184,24 @@ const data = JSON.parse(document.querySelector("#replay-data").textContent);
 const methods = [
   {key:"equal", label:"Equal allocation", desc:"Split readings evenly across selected rooms.", color:"#346e8b"},
   {key:"priority", label:"Priority allocation", desc:"Favor uncertain rooms that cost less to reach.", color:"#a25432"},
-  {key:"rollout", label:"Rollout", desc:"Compare possible continuations within the budget.", color:"#306c56"}
+  {key:"rollout", label:"GP rollout", desc:"Compare continuations using Bayesian ridge.", color:"#306c56"},
+  {key:"learned_world", label:"Learned world model", desc:"Plan around several possible next readings.", color:"#72508c"}
+];
+const rolloutMethods = [
+  {key:"learned_rollout", label:"World model rollout", color:"#8055a5", path:"#69418b", stop:"#ad7ed7"},
+  {key:"rollout", label:"GP rollout", color:"#2e8476", path:"#205c50", stop:"#44ab9b"}
 ];
 const byId = id => document.getElementById(id);
 const cards = byId("cards");
 const controls = ["layout","start","budget","regime"].map(byId);
 const slider = byId("step");
 const play = byId("play");
-let frame=1, layer="mean", interval=null, replay, extent, ceiling;
+let frame=1, layer="mean", displayMode="duel", playback=null, pausedElapsed=0, replay, extent, ceiling;
+const worldMethod=byId("world-method");
+worldMethod.innerHTML=methods.map(m=>`<option value="${m.key}">${m.label}</option>`).join("");
+worldMethod.value="learned_world";
+let savedBudget=byId("budget").value;
+byId("budget").disabled=true;
 const roomOf = site => site%12 < 3 ? 0 : site%12 < 9 ? 1 : 2;
 const cell = site => [site%12, 11-Math.floor(site/12)];
 const center = site => cell(site).map(a=>a+.5);
@@ -139,6 +245,7 @@ function miniMap(values, label, uncertain=false, method=null, plan=null, n=0) {
     ${markers}
   </svg>`;
 }
+__WORLD_RENDERER__
 function paint() {
   slider.value=frame;
   slider.setAttribute("aria-valuetext",`Reading ${frame} of ${slider.max}`);
@@ -147,6 +254,14 @@ function paint() {
   byId("forward").disabled=frame>=Number(slider.max);
   const std=layer==="std";
   byId("std-scale").hidden=!std;
+  if(displayMode==="duel"){
+    paintDuel();
+    return;
+  }
+  if(displayMode==="world"){
+    paintWorld();
+    return;
+  }
   cards.innerHTML=methods.map((method,i)=>{
     const plan=replay.plans[method.key], n=Math.min(frame,plan.sites.length);
     const counts=[0,0,0]; for(const site of plan.sites.slice(0,n)) counts[roomOf(site)]++;
@@ -162,46 +277,110 @@ function paint() {
     </article>`;
   }).join("");
 }
-function stop(){clearInterval(interval);interval=null;play.textContent="▶ Play";play.setAttribute("aria-label","Play replay");}
+function stop(pause=false){
+  if(playback!==null) cancelAnimationFrame(playback.request);
+  pausedElapsed=pause ? playback.elapsed : 0;
+  playback=null;
+  play.textContent="▶ Play";
+  play.setAttribute("aria-label","Play replay");
+}
+function finish(){
+  stop();
+  byId("status").textContent="Replay complete.";
+}
+function queueFrame(){
+  playback={request:0,started:null,elapsed:pausedElapsed};
+  pausedElapsed=0;
+  const keys = displayMode==="duel" ? rolloutMethods.map(method=>method.key) : [worldMethod.value];
+  const legs = keys.map(key=>{
+    const plan=replay.plans[key];
+    const from=plan.endpoints[Math.min(frame,plan.sites.length)-1]-1;
+    const to=plan.endpoints[Math.min(frame+1,plan.sites.length)-1]-1;
+    return {from,to};
+  });
+  const longest=Math.max(...legs.map(({from,to})=>to-from));
+  const moving=displayMode!=="compare"&&longest>0&&!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const duration=moving? Math.min(1300,500+125*longest):520;
+  const advance=now=>{
+    if(playback.started===null) playback.started=now-playback.elapsed;
+    playback.elapsed=now-playback.started;
+    const progress=Math.min(1,playback.elapsed/duration);
+    if(progress===1){
+      changeFrame(frame+1,false);
+      if(frame>=Number(slider.max)) finish();
+      else queueFrame();
+      return;
+    }
+    if(moving && progress>.24){
+      const fraction=(progress-.24)/.76;
+      const cursors=legs.map(({from,to})=>to>from ? from+(to-from)*fraction : undefined);
+      if(displayMode==="duel") paintDuel(cursors);
+      else paintWorld(cursors[0]);
+    }
+    playback.request=requestAnimationFrame(advance);
+  };
+  playback.request=requestAnimationFrame(advance);
+}
 function changeFrame(n, announce=true){
+  futureIndex=null;
   frame=Math.max(1,Math.min(Number(slider.max),n));paint();
   if(announce) byId("status").textContent=`Reading ${frame} of ${slider.max}`;
 }
-function loadCase(){
+function loadCase(reading=1){
   stop();
   const [layout,start,budget,regime]=controls.map(el=>el.value);
   replay=data.cases.find(c=>c.layout===Number(layout)&&c.start===Number(start)&&c.budget===budget&&c.regime===regime);
   if(!replay) throw new Error("Missing replay case");
-  slider.max=Math.max(...Object.values(replay.plans).map(p=>p.sites.length));
-  const predictions=Object.values(replay.plans);
+  const active = displayMode==="duel" ? rolloutMethods : methods;
+  const predictions=active.map(method=>replay.plans[method.key]);
+  slider.max=Math.max(...predictions.map(p=>p.sites.length));
   extent=Math.max(1,Math.ceil(Math.max(...replay.truth.map(Math.abs),
     ...predictions.flatMap(p=>p.mean.flat().map(Math.abs)))/1000));
   ceiling=Math.max(.1,Math.ceil(Math.max(...predictions.flatMap(p=>p.std.flat()))/100)/10);
   byId("scale-min").textContent=(-extent).toFixed(1);
   byId("scale-max").textContent=extent.toFixed(1);
   byId("std-max").textContent=ceiling.toFixed(1);
-  byId("reference-map").innerHTML=miniMap(replay.truth,"True sensor field with held-out sites");
-  byId("travel-cap").textContent=`${data.caps[budget].toFixed(3)} travel cap`;
-  changeFrame(1);
+  const reference=miniMap(replay.truth,"True sensor field with held-out sites");
+  byId("reference-map").innerHTML=reference;
+  byId("world-reference").innerHTML=reference;
+  byId("travel-cap").textContent=`${Math.round(data.caps[budget]*11)} walking steps max`;
+  changeFrame(reading);
 }
-controls.forEach(el=>el.addEventListener("change",loadCase));
+controls.forEach(el=>el.addEventListener("change",()=>loadCase()));
+worldMethod.addEventListener("change",()=>{stop();futureIndex=null;paint();});
+document.querySelectorAll("[data-view]").forEach(btn=>btn.addEventListener("click",()=>{
+  stop();
+  futureIndex=null;
+  const budget=byId("budget");
+  const oldBudget=budget.value;
+  if(displayMode!=="duel") savedBudget=oldBudget;
+  displayMode=btn.dataset.view;
+  budget.value=displayMode==="duel" ? "loose" : savedBudget;
+  budget.disabled=displayMode==="duel";
+  document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",String(b===btn)));
+  for(const id of ["duel","world","compare"]){
+    byId(id).hidden=id!==displayMode;
+    byId(id+"-key").hidden=id!==displayMode;
+  }
+  loadCase(budget.value===oldBudget ? frame : 1);
+}));
 document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("click",()=>{
   layer=btn.dataset.layer;
   document.querySelectorAll("[data-layer]").forEach(b=>b.setAttribute("aria-pressed",String(b===btn)));
-  paint();
+  if (displayMode==="duel") paintDuel(duelCursors);
+  else if (displayMode==="world" && liveCursor!==undefined) paintWorld(liveCursor);
+  else paint();
 }));
 slider.addEventListener("input",()=>{stop();changeFrame(Number(slider.value));});
 byId("back").addEventListener("click",()=>{stop();changeFrame(frame-1);});
 byId("forward").addEventListener("click",()=>{stop();changeFrame(frame+1);});
 byId("reset").addEventListener("click",()=>{stop();changeFrame(1);});
 play.addEventListener("click",()=>{
-  if(interval!==null){stop();return;}
+  if(playback!==null){stop(true);return;}
   if(frame>=Number(slider.max)) changeFrame(1);
+  if(futureIndex!==null){futureIndex=null;paint();}
   play.textContent="Ⅱ Pause";play.setAttribute("aria-label","Pause replay");
-  interval=setInterval(()=>{
-    changeFrame(frame+1,false);
-    if(frame>=Number(slider.max)){stop();byId("status").textContent="Replay complete.";}
-  },430);
+  queueFrame();
 });
 loadCase();
 </script>
