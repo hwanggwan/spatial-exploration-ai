@@ -8,6 +8,8 @@
 
 The opening replay compares the existing rollout with a policy that measures at least two distinct sites in each room. Both robots walk **156 steps** and take **24 readings**. Move the timeline to see their predictions and uncertainty after each reading, with the true field alongside. The experiment selector also opens the earlier [52-step greedy comparison](https://hwanggwan.github.io/spatial-exploration-ai/#greedy-rollout). To use the demo offline, download and open the [standalone HTML](demo/index.html).
 
+Switch **Floor plan** to explore [three rooms in a row](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row) or a [four-room loop](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-loop). Each layout shows a selected paired replay with the same travel and reading counts.
+
 ## What we found
 
 **A room requirement improves coverage. Extra walking distance helps the robot reach useful sites inside those rooms.** Across eight layout/start pairs, the two-site requirement obtained at least two readings in every room on all eight 52-step routes, compared with zero of eight for the unconstrained rollout. At that budget, whole-map error was similar and short-zone error increased. At 104 and 156 steps, both map errors fell for both policies.
@@ -18,7 +20,7 @@ The opening replay compares the existing rollout with a policy that measures at 
 | 104 | 0.6622 / 0.6451 | 0.7353 / 0.7243 |
 | 156 | 0.6259 / 0.6118 | 0.7030 / 0.6887 |
 
-The table averages **448 paired synthetic fields** with short- and long-range zones and weak cross-wall dependence. All six policies share a 24-reading cap and are evaluated on cells unmeasured by all six routes. For the six starts where the minimum-two policy took exactly 24 readings at both 104 and 156 steps, the longer route lowered short-zone RMSE by **0.0396** (paired 95% interval [−0.0498, −0.0291]). At 156 steps, the comparison between policies on starts where both took 24 readings had a whole-map RMSE difference of −0.0031 [−0.0102, +0.0039]. [Protocol and paired results](docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap)
+The table averages **448 paired corridor fields** with short- and long-range zones and weak cross-wall dependence. All six policies share a 24-reading cap and are evaluated on cells unmeasured by all six routes. For the six starts where the minimum-two policy took exactly 24 readings at both 104 and 156 steps, the longer route lowered short-zone RMSE by **0.0396** (paired 95% interval [−0.0498, −0.0291]). At 156 steps, the comparison between policies on starts where both took 24 readings had a whole-map RMSE difference of −0.0031 [−0.0102, +0.0039]. [Protocol and paired results](docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap)
 
 The replay shows one selected field where the room requirement improves whole-map RMSE from **0.721 to 0.673** and short-zone RMSE from **0.772 to 0.681**. Both routes use 156 steps and 24 readings, and the comparison scores the same 484 unmeasured cells. [See the true field and predicted maps](demo/room-coverage-maps.png).
 

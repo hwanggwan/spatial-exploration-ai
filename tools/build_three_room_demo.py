@@ -175,7 +175,8 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(template, encoding="utf8")
     n_refined = len(refined["cases"]) if refined else 0
-    n_coverage = int(bool(refined and refined.get("roomCoverage")))
+    coverage = refined.get("roomCoverage") if refined else None
+    n_coverage = 1 + len(coverage["alternatives"]) if coverage else 0
     print(f"Exported {n_refined} corridor, {n_coverage} room coverage, and {len(data['cases'])} three-room replays to {args.output}")
 
 

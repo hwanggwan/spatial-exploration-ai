@@ -1,4 +1,4 @@
-// Distance-synchronized replay of the refined corridor benchmark.
+// Distance-synchronized floor-plan replays.
 const refinedMethods = [
   {key:"fine_candidates", label:"Greedy", path:"#663694", stop:"#d0a2f7"},
   {key:"fine_rollout", label:"Rollout", path:"#328b7c", stop:"#6cccbb"}
@@ -12,6 +12,8 @@ const refinedZones = ["Lower-left room","Lower-right room","Corridor","Upper roo
 const refinedSlider = byId("refined-step");
 const refinedPlay = byId("refined-play");
 const refinedStudy = byId("refined-study");
+const coverageLayout = byId("coverage-layout");
+const coverageScenes = refinedData?.roomCoverage ? [refinedData.roomCoverage,...(refinedData.roomCoverage.alternatives ?? [])] : [];
 let refinedScene, refinedLayout, refinedLimit, refinedExtent, refinedCeiling, refinedPosition=0, refinedAnimation=null;
 let showingRoomCoverage;
 let refinedViews=[], refinedTruth;
@@ -22,7 +24,7 @@ function stopRefined(){
   refinedPlay.textContent="▶ Play";
 }
 
-function mountRefined(methods, coverage){
+function mountRefined(methods){
   const container=byId("refined-cards");
   container.querySelectorAll(".viewport canvas").forEach(canvas=>observer.unobserve(canvas));
   container.innerHTML=methods.map(method=>`
@@ -44,9 +46,7 @@ function mountRefined(methods, coverage){
     <article class="duel-card refined-truth" style="--route:#475e53">
       <h2>True field</h2>
       <div class="viewport"><canvas role="img" aria-label="True 3D sensor field"></canvas></div>
-      <p class="desc">${coverage
-        ? "The lower-left room, upper room, and corridor have short sensor range. The lower-right room has long range."
-        : "Small dots mark the 100 hold-out sites used to score the maps."}</p>
+      <p class="desc" id="refined-truth-note"></p>
     </article>`;
   refinedViews=methods.map((method,i)=>{
     const card=container.children[i];
@@ -60,6 +60,17 @@ function mountRefined(methods, coverage){
 
 function showCoverageResults(){
   const {fields,scores,evaluationCells}=refinedScene;
+  if(!scores){
+    const rows=coverageMethods.map(({key,label},i)=>`<tr><th scope="row">${label}</th>
+      <td>${refinedScene.plans[key].rmse.at(-1).toFixed(4)}</td><td>${refinedScene.shortScores[i].toFixed(4)}</td></tr>`).join("");
+    byId("refined-result-title").textContent="Final RMSE for this replay";
+    byId("refined-results").innerHTML=`<thead><tr><th scope="col">Method</th><th scope="col">Whole map</th>
+      <th scope="col">Short areas</th></tr></thead><tbody>${rows}</tbody>`;
+    byId("refined-result-note").textContent="This layout shows one selected field with lower whole-map and short-zone RMSE under the room requirement.";
+    byId("refined-result-detail").textContent=`Both routes are scored on the same ${evaluationCells} unmeasured cells.`;
+    return;
+  }
+  byId("refined-result-title").textContent="Corridor benchmark RMSE";
   const rows=scores.map(({budget,overall,short})=>`<tr aria-current="${budget===refinedLimit}">
     <th scope="row">${budget} steps</th>${[...overall,...short].map(value=>`<td>${value.toFixed(4)}</td>`).join("")}
     </tr>`).join("");
@@ -71,6 +82,7 @@ function showCoverageResults(){
 }
 
 function showRefinedResults(matched){
+  byId("refined-result-title").textContent="Benchmark RMSE";
   const heading=matched ? ["Greedy","Rollout prefix"] : ["Greedy · original sites","Greedy · all sites","Rollout · all sites"];
   const rows=Object.entries(refinedData.results).map(([scenario,result])=>{
     const values=matched ? result.matched : result.caps;
@@ -94,18 +106,21 @@ function loadRefined(){
   const coverage=Boolean(refinedData.roomCoverage && refinedStudy.value==="coverage");
   if(coverage!==showingRoomCoverage){
     showingRoomCoverage=coverage;
-    mountRefined(coverage ? coverageMethods : refinedMethods, coverage);
+    mountRefined(coverage ? coverageMethods : refinedMethods);
   }
   byId("refined-selects").classList.toggle("coverage-controls",coverage);
+  byId("coverage-layout-label").hidden=!coverage || coverageScenes.length<=1;
   document.querySelectorAll("[data-greedy-control]").forEach(label=>label.hidden=coverage);
   byId("refined-left-label").textContent=coverage ? "Existing rollout only" : "Greedy only";
   byId("refined-right-label").textContent=coverage ? "Minimum two only" : "Rollout only";
-  byId("refined-report").href=coverage
-    ? "../docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap"
-    : "../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid";
   const layout=Number(byId("refined-layout").value), scenario=byId("refined-field").value;
   const matched=!coverage && byId("refined-budget").value==="matched";
-  refinedScene=coverage ? refinedData.roomCoverage : refinedData.cases.find(c=>c.layout===layout && c.scenario===scenario);
+  refinedScene=coverage ? coverageScenes.find(scene=>scene.id===coverageLayout.value) ?? coverageScenes[0]
+    : refinedData.cases.find(c=>c.layout===layout && c.scenario===scenario);
+  byId("refined-report").href=coverage
+    ? (refinedScene.scores ? "../docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap"
+                            : "../docs/residential-floor-plan-study.md#additional-floor-plans-in-the-replay")
+    : "../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid";
   refinedLayout=coverage ? refinedScene.layout : refinedData.layouts[layout];
   refinedLimit=coverage ? refinedScene.travel : matched ? refinedScene.cutoff : refinedData.travel;
   const plans=Object.values(refinedScene.plans);
@@ -114,14 +129,22 @@ function loadRefined(){
   refinedCeiling=Math.max(.1, Math.ceil(Math.max(...plans.flatMap(p=>p.std.flat()))/100)/10);
   refinedPosition=0;
   refinedSlider.max=refinedLimit;
-  byId("reading-cap").textContent=`${refinedData.cap} readings max`;
+  byId("reading-cap").textContent=`${coverage ? refinedScene.cap : refinedData.cap} readings max`;
   byId("travel-cap").textContent=matched ? `${refinedLimit} walking steps compared` : `${refinedLimit} walking steps max`;
   byId("scale-min").textContent=(-refinedExtent).toFixed(1);
   byId("scale-max").textContent=refinedExtent.toFixed(1);
   byId("refined-explanation").textContent=coverage
-    ? "Both routes walk 156 steps and take 24 readings. Compare how they sample the lower-left room."
+    ? "Both routes walk 156 steps and take 24 readings. Compare how they distribute readings across rooms."
     : matched ? "The original rollout is replayed up to greedy’s walking distance. Drag any view to rotate together."
               : "Both routes start together and use the same caps. Drag any view to rotate together.";
+  if(coverage){
+    const {zoneNames,shortZones}=refinedScene;
+    const short = zoneNames.filter((_,i)=>shortZones[i]).map(name=>name.toLowerCase()).join(", ");
+    const long = zoneNames.filter((_,i)=>!shortZones[i]).map(name=>name.toLowerCase()).join(", ");
+    byId("refined-truth-note").textContent=`Short range in ${short}. Long range in ${long}.`;
+  } else {
+    byId("refined-truth-note").textContent="Small dots mark the 100 hold-out sites used to score the maps.";
+  }
   if(coverage) showCoverageResults();
   else showRefinedResults(matched);
   paintRefined();
@@ -130,6 +153,7 @@ function loadRefined(){
 function paintRefined(){
   if(displayMode!=="refined" || !refinedScene) return;
   const layout=refinedLayout;
+  const zones=showingRoomCoverage ? refinedScene.zoneNames : refinedZones;
   const step=Math.floor(refinedPosition);
   refinedSlider.value=step;
   refinedSlider.setAttribute("aria-valuetext",`${step} of ${refinedLimit} walking steps`);
@@ -143,7 +167,7 @@ function paintRefined(){
   refinedViews.forEach((view,i)=>{
     const {method,canvas,stats,uncertainty}=view;
     const {plan,distance,n,measured}=snapshots[i], other=snapshots[1-i].measured;
-    const counts=[0,0,0,0];
+    const counts=zones.map(()=>0);
     for(const site of measured) counts[layout.zones[site]]++;
     const next=plan.endpoints[n]-1 <= refinedLimit ? plan.sites[n] : undefined;
     let phase=distance===plan.endpoints[n-1]-1 ? `Reading ${n}` : "Walking";
@@ -152,13 +176,13 @@ function paintRefined(){
     const values={
       phase,
       rmse:plan.rmse[n-1].toFixed(4), steps:`${Math.floor(distance)} / ${refinedLimit}`,
-      readings:`${n} / ${refinedData.cap}`
+      readings:`${n} / ${showingRoomCoverage ? refinedScene.cap : refinedData.cap}`
     };
     for(const [key,value] of Object.entries(values)){
       if(stats[key].textContent!==value) stats[key].textContent=value;
     }
-    const zones=refinedZones.map((name,j)=>`<span>${name} <b>${counts[j]}</b></span>`).join("");
-    if(stats.zones.innerHTML!==zones) stats.zones.innerHTML=zones;
+    const byRoom=zones.map((name,j)=>`<span>${name} <b>${counts[j]}</b></span>`).join("");
+    if(stats.zones.innerHTML!==byRoom) stats.zones.innerHTML=byRoom;
     const highlight={path:method.path,fill:site=>other.has(site) ? "#fafff5" : method.stop};
     drawWorld(canvas,layout,plan,n,distance,next,plan.mean[n-1],highlight,
               v=>color(v,false,refinedExtent));
@@ -177,7 +201,10 @@ function seekRefined(step){
 byId("refined-study-label").hidden=!refinedData?.roomCoverage;
 byId("refined-selects").classList.toggle("has-study-selector",Boolean(refinedData?.roomCoverage));
 refinedStudy.value=refinedData?.roomCoverage && location.hash!=="#greedy-rollout" ? "coverage" : "greedy";
-["refined-study","refined-layout","refined-field","refined-budget"].map(byId).forEach(
+coverageLayout.replaceChildren(...coverageScenes.map(scene=>new Option(scene.label,scene.id)));
+const requestedLayout=location.hash.slice("#room-coverage-".length);
+if(coverageScenes.some(scene=>scene.id===requestedLayout)) coverageLayout.value=requestedLayout;
+["refined-study","refined-layout","refined-field","refined-budget","coverage-layout"].map(byId).forEach(
   element=>element.addEventListener("change",loadRefined));
 refinedSlider.addEventListener("input",()=>seekRefined(Number(refinedSlider.value)));
 byId("refined-reset").addEventListener("click",()=>seekRefined(0));

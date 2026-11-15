@@ -72,14 +72,15 @@ class RoomCompletion:
 class TwoReadingCompletion:
     """Certify a completion by grouping a room's pending readings into one stop sequence."""
 
-    def __init__(self, layout, allowed):
+    def __init__(self, layout, allowed, rooms=ROOMS):
         self.zones = layout.room
         self.distances = layout.distances
+        self.rooms = tuple(rooms)
         self.portals = {}
         self.single = {}
         self.double = {}
         self.local_next = {}
-        for room in ROOMS:
+        for room in self.rooms:
             inside = layout.room == room
             sites = np.flatnonzero(inside & allowed)
             ports = np.flatnonzero(inside & layout.movement[:, ~inside].any(axis=1))
@@ -134,13 +135,13 @@ class TwoReadingCompletion:
     def candidates(self, observed, current, sites, remaining, readings_left):
         seen_zones = self.zones[observed]
         counts = np.bincount(seen_zones, minlength=int(self.zones.max())+1)
-        excluded = {room: observed[seen_zones == room][0] for room in ROOMS if counts[room] == 1}
+        excluded = {room: observed[seen_zones == room][0] for room in self.rooms if counts[room] == 1}
         allowed = np.zeros(len(sites), dtype=bool)
         for new_zone in np.unique(self.zones[sites]):
             mask = self.zones[sites] == new_zone
             group = sites[mask]
-            pending = {room: max(2-counts[room]-int(room == new_zone), 0) for room in ROOMS}
-            needed = tuple(room for room in ROOMS if pending[room])
+            pending = {room: max(2-counts[room]-int(room == new_zone), 0) for room in self.rooms}
+            needed = tuple(room for room in self.rooms if pending[room])
             if sum(pending.values()) > readings_left - 1:
                 continue
             cost = self.distances[current, group]
@@ -155,7 +156,7 @@ class TwoReadingCompletion:
     def reserve(self, observed):
         prefix = np.asarray(observed, dtype=int)
         counts = np.bincount(self.zones[prefix], minlength=int(self.zones.max())+1)
-        if all(counts[room] >= 2 for room in ROOMS):
+        if all(counts[room] >= 2 for room in self.rooms):
             return None
 
         def can_complete(current, candidates, remaining, readings_left, suffix):
@@ -165,7 +166,7 @@ class TwoReadingCompletion:
         return can_complete
 
 
-def plan_route(layout, anchors, allowed, prior, start, completion=None, *, minimum=0, edge_cap=EDGES):
+def plan_route(layout, anchors, allowed, prior, start, completion=None, *, minimum=0, edge_cap=EDGES, rooms=ROOMS):
     origin = int(anchors[start])
     available = allowed.copy()
     sites = [origin]
@@ -191,14 +192,14 @@ def plan_route(layout, anchors, allowed, prior, start, completion=None, *, minim
     arrivals = np.r_[0, np.rint(layout.distances[sites[:-1], sites[1:]] * (layout.size-1)).astype(int).cumsum()]
     np.testing.assert_array_equal(walk[arrivals], sites)
     resources = route_resources(layout, walk, sites, anchors, edge_cap)
-    counts = np.bincount(layout.room[sites], minlength=4)
-    if any(counts[room] < minimum for room in ROOMS):
+    counts = np.bincount(layout.room[sites], minlength=int(layout.room.max())+1)
+    if any(counts[room] < minimum for room in rooms):
         raise RuntimeError("The route stopped before completing its room quota")
-    first_reading = {room: int(arrivals[layout.room[sites] == room][0]) if counts[room] else None for room in ROOMS}
-    first_entry = {room: int(np.flatnonzero(layout.room[walk] == room)[0]) if room in layout.room[walk] else None for room in ROOMS}
-    reading_steps = {room: arrivals[layout.room[sites] == room][:2].tolist() for room in ROOMS}
+    first_reading = {room: int(arrivals[layout.room[sites] == room][0]) if counts[room] else None for room in rooms}
+    first_entry = {room: int(np.flatnonzero(layout.room[walk] == room)[0]) if room in layout.room[walk] else None for room in rooms}
+    reading_steps = {room: arrivals[layout.room[sites] == room][:2].tolist() for room in rooms}
     pair_distance = {room: round(layout.distances[tuple(sites[layout.room[sites] == room][:2])] * (layout.size-1))
-                     if counts[room] >= 2 else None for room in ROOMS}
+                     if counts[room] >= 2 else None for room in rooms}
     return dict(**resources, sites=sites.tolist(), walk=walk.tolist(), arrivals=arrivals.tolist(),
                 room_readings=counts.tolist(), first_room_reading=first_reading, first_room_entry=first_entry,
                 first_two_room_steps=reading_steps, first_pair_distance=pair_distance,

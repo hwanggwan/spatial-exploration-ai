@@ -565,3 +565,14 @@ The output in `outputs/sensing-world-residential-travel-budget` includes route r
 All 48 routes use their entire walking budget. The common set averages 431.4 evaluation cells. For the two-per-room policy, mean first-pair spacing is 1.88, 3.50, and 5.63 edges. Mean deepest reading by room is 5.63, 9.88, and 11.17 edges from the doorway. On the illustrated start the left room is measured to depths of 2, 8, and 10 edges. The 104-to-156-edge comparison restricted to the six starts with 24 readings at both budgets covers 336 fields. The two-per-room policy's paired changes are −0.03490 [−0.04158, −0.02825] for whole-map RMSE and −0.03959 [−0.04981, −0.02915] for short-zone RMSE. The room-range accuracy difference from 52 to 156 edges is +3.79 percentage points [+1.26, +6.25].
 
 At 156 edges the two-per-room policy's whole-map difference relative to existing rollout is −0.01409 [−0.02015, −0.00802] on the common set and +0.00454 [−0.00277, +0.01185] on the original 100 hold-outs. Restricting the common-set comparison to the five starts where both 156-edge routes use 24 readings gives −0.00313 [−0.01017, +0.00389]. Nominal 95% interval coverage is 94.95–95.24% across the six arms. Mean planning time for 104 and 156 edges is 1.13 and 1.57 seconds for existing rollout and 1.68 and 2.12 seconds for the two-per-room variant during the two-worker run.
+
+### Additional floor plans in the replay
+
+The 156-step room-coverage replay also includes three rooms in a row and four rooms connected in a loop. Both comparisons use the same frozen mixture mapper, rollout score, and 24-reading cap. The constrained route requires two distinct readings in each physical room, including all four rooms in the loop. Each example uses a mixed-range field with weak cross-wall dependence and the same starting site for the two routes. The builder verifies the realized travel and reading counts and scores predictions on the 486 cells both routes leave unmeasured in each example.
+
+| Selected replay | Whole-map RMSE, existing → minimum two | Short-zone RMSE, existing → minimum two |
+| --- | ---: | ---: |
+| Three rooms in a row | 0.5565 → 0.5268 | 0.6836 → 0.6185 |
+| Four-room loop | 0.6020 → 0.5566 | 0.8921 → 0.7880 |
+
+The examples were selected from paired fields where the minimum-two policy improved both scores. They show how the routes behave in these layouts. The 448-field travel-budget benchmark above covers the corridor layouts.

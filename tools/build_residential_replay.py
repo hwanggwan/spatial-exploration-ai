@@ -8,6 +8,7 @@ from threadpoolctl import threadpool_limits
 
 from audit_residential_grid_resolution import holdouts, predictions, refine_geometry, refined_mapper
 from audit_residential_refined_rollout import ARM_ROLLOUT, MATCHED_ARMS, PLANNER_ARMS, field_batches, field_key
+from audit_residential_room_quota import TwoReadingCompletion, plan_route
 from audit_residential_routes import LayoutCase, floor_plan
 from audit_residential_zone_ranges import GLOBAL_WEIGHTS
 
@@ -15,6 +16,11 @@ from audit_residential_zone_ranges import GLOBAL_WEIGHTS
 GREEDY = PLANNER_ARMS[1]
 ARMS = (GREEDY, ARM_ROLLOUT)
 RANGES = ("short", "mixed", "long")
+COVERAGE_ARMS = ("quarter_156", "room_quota_two_156")
+ADDITIONAL_ROOM_CASES = (
+    ("row", "Three rooms in a row", 64, 1, 1, ("Left room", "Middle room", "Right room")),
+    ("loop", "Four-room loop", 128, 0, 1, ("Lower-left room", "Lower-right room", "Upper-left room", "Upper-right room")),
+)
 
 
 def pack_layout(layout, held):
@@ -139,7 +145,7 @@ def build_room_coverage_replay(study, root):
     variant, start = (config["example"][k] for k in ("variant", "start"))
     regime, profile, draw, travel = "weak", 10, 2, 156
     example = dict(variant=variant, regime=regime, start=start, profile=profile, draw=draw)
-    arms = ("quarter_156", "room_quota_two_156")
+    arms = COVERAGE_ARMS
     routes = {row["arm"]: row for row in json.loads((study / "routes.json").read_text())
               if (row["variant"], row["start"]) == (variant, start)}
     with (study / "fields.csv").open() as stream:
@@ -181,6 +187,54 @@ def build_room_coverage_replay(study, root):
         pair = [source["scores"][f"{method}_{budget}"] for method in ("quarter", "room_quota_two")]
         scores.append(dict(budget=budget, overall=[score["common_rmse"] for score in pair],
                            short=[score["short_rmse"] for score in pair]))
-    return dict(layout=pack_layout(fine, np.empty(0, dtype=int)), travel=travel, cap=config["cap"], plans=plans,
+    alternatives = build_additional_room_replays(weights, travel, config["cap"])
+    return dict(id="corridor", label="Three rooms off a corridor",
+                zoneNames=["Lower-left room", "Lower-right room", "Corridor", "Upper room"],
+                shortZones=(short_profile > 0.5).tolist(), alternatives=alternatives,
+                layout=pack_layout(fine, np.empty(0, dtype=int)), travel=travel, cap=config["cap"], plans=plans,
                 truth=np.rint(truth * 1000).astype(int).tolist(), scores=scores, fields=source["fields"],
                 evaluationCells=len(common))
+
+
+def build_additional_room_replays(model, travel, cap):
+    """Plan and score the selected row and loop examples on common unmeasured cells."""
+    variants = []
+    with threadpool_limits(limits=1):
+        for family, label, start, profile, draw, zone_names in ADDITIONAL_ROOM_CASES:
+            coarse = floor_plan(LayoutCase(family, 0))
+            fine, anchors = refine_geometry(coarse)
+            held, _ = holdouts(coarse, fine, anchors, 0)
+            grid = np.arange(len(fine.room))
+            allowed = ~np.isin(grid, held)
+            rooms = tuple(map(int, np.unique(fine.room)))
+            if rooms != tuple(range(len(zone_names))):
+                raise ValueError("Room names must match the movement graph")
+            profiles, kernels, weights, curve = refined_mapper(coarse, fine, anchors, model)
+            prior = np.einsum("m,mij->ij", weights, kernels)
+            completion = TwoReadingCompletion(fine, allowed, rooms)
+            routes = [plan_route(fine, anchors, allowed, prior, start, constraint,
+                                 minimum=minimum, edge_cap=travel, rooms=rooms)
+                      for constraint, minimum in ((None, 0), (completion, 2))]
+            for route in routes:
+                if (route["sites"][0], len(route["sites"]), route["edges"]) != (anchors[start], cap, travel):
+                    raise ValueError(f"{family} replay must use the same start and both budgets")
+            common = np.setdiff1d(grid, np.concatenate([route["sites"] for route in routes]))
+            if not np.isin(held, common).all():
+                raise ValueError(f"{family} replay measured a reserved cell")
+            batch = next(batch for batch in field_batches(0, fine, profiles, curve)
+                         if batch[:4] == ("weak", start, profile, "mixed"))
+            truth, readings = (values[draw] for values in batch[4:])
+            short_zones = profiles[len(GLOBAL_WEIGHTS) + profile] > 0.5
+            short = common[short_zones[fine.room[common]]]
+            plans = {arm: pack_plan(fine, common, kernels, np.log(weights), route, truth, readings,
+                                   score_groups=dict(example_short_rmse=short))
+                     for arm, route in zip(COVERAGE_ARMS, routes)}
+            short_scores = [plan.pop("example_short_rmse")[-1] for plan in plans.values()]
+            baseline, constrained = (plans[arm]["rmse"][-1] for arm in COVERAGE_ARMS)
+            if not (constrained < baseline and short_scores[1] < short_scores[0]):
+                raise ValueError(f"{family} replay must illustrate gains on both evaluation measures")
+            variants.append(dict(id=family, label=label, zoneNames=zone_names, shortZones=short_zones.tolist(),
+                                 layout=pack_layout(fine, np.empty(0, dtype=int)), travel=travel, cap=cap, plans=plans,
+                                 truth=np.rint(truth * 1000).astype(int).tolist(), shortScores=short_scores,
+                                 evaluationCells=len(common)))
+    return variants
