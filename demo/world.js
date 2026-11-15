@@ -1,12 +1,75 @@
 // Orthographic 3D replay drawn from the archived grid and walking path.
+function uncertaintyPanel(label) {
+  return `<section class="uncertainty-panel">
+    <h3>Uncertainty</h3>
+    <canvas width="288" height="288" role="img" aria-label="${label} top-down uncertainty map"></canvas>
+    <div class="legend" aria-label="Posterior standard deviation color scale">
+      <span>0</span><span class="ramp uncertainty"></span><span data-uncertainty-max></span><span>Std. dev.</span>
+    </div>
+  </section>`;
+}
+
+function bindUncertainty(container) {
+  const panel=container.querySelector(".uncertainty-panel");
+  return {canvas:panel.querySelector("canvas"), heading:panel.querySelector("h3"),
+          maximum:panel.querySelector("[data-uncertainty-max]")};
+}
+
+function wallSegments(layout) {
+  if(layout.walls) return layout.walls;
+  return layout.doors.flatMap((door,i)=>{
+    const x=i ? 9 : 3, opening=11-door;
+    return [[x,0,x,opening],[x,opening+1,x,12]];
+  });
+}
+
+function paintUncertainty(panel, layout, values, bound, measured, stopColor) {
+  if(panel.values===values && panel.bound===bound) return;
+  const {canvas}=panel, ctx=canvas.getContext("2d");
+  if(!ctx) return;
+  panel.values=values;
+  panel.bound=bound;
+  panel.maximum.textContent=bound.toFixed(1);
+  const size=layout.size ?? 12, unit=canvas.width/size;
+  const cell=site=>[site%size,size-1-Math.floor(site/size)];
+  for(let site=0;site<values.length;site++){
+    const [col,row]=cell(site);
+    const x=Math.round(col*unit), y=Math.round(row*unit);
+    ctx.fillStyle=color(values[site]/1000,true,bound);
+    ctx.fillRect(x,y,Math.round((col+1)*unit)-x,Math.round((row+1)*unit)-y);
+  }
+  ctx.beginPath();
+  for(const [x0,y0,x1,y1] of wallSegments(layout)){
+    ctx.moveTo(x0*unit,y0*unit);
+    ctx.lineTo(x1*unit,y1*unit);
+  }
+  ctx.strokeStyle="#243d3a";
+  ctx.lineWidth=2;
+  ctx.lineCap="round";
+  ctx.stroke();
+  for(const site of measured){
+    const [col,row]=cell(site);
+    ctx.beginPath();
+    ctx.arc((col+.5)*unit,(row+.5)*unit,unit*.18,0,Math.PI*2);
+    ctx.fillStyle="#fdfdfa";
+    ctx.fill();
+    ctx.strokeStyle=stopColor;
+    ctx.lineWidth=1.25;
+    ctx.stroke();
+  }
+}
+
 const worldCanvas = byId("world-canvas");
+const worldUncertaintyContainer=byId("world-uncertainty");
+worldUncertaintyContainer.innerHTML=uncertaintyPanel("3D world");
+const worldUncertainty=bindUncertainty(worldUncertaintyContainer);
 const duelCards = byId("duel-cards");
 duelCards.innerHTML = rolloutMethods.map(m=>`
   <article class="duel-card" style="--route:${m.color}" aria-labelledby="${m.key}-title">
     <h2 id="${m.key}-title">${m.label}</h2>
     <div class="viewport">
       <canvas id="${m.key}-canvas" role="img" aria-label="${m.label} 3D measurement route"></canvas>
-      <div class="viewport-ui"><span class="viewport-label" data-stat="layer"></span></div>
+      <div class="viewport-ui"><span class="viewport-label">Predicted field</span></div>
       <div class="viewport-bottom"><span></span><span class="sensor-state" data-stat="stage"></span></div>
     </div>
     <div class="stats">
@@ -15,10 +78,11 @@ duelCards.innerHTML = rolloutMethods.map(m=>`
       <div><span class="key">Readings</span><span class="number" data-stat="readings"></span></div>
     </div>
     <div class="rooms" data-stat="rooms"></div>
+    ${uncertaintyPanel(m.label)}
   </article>`).join("");
 const duelViews = rolloutMethods.map((method,i)=>{
   const card=duelCards.children[i];
-  return {method,canvas:card.querySelector("canvas"),
+  return {method,canvas:card.querySelector(".viewport canvas"),uncertainty:bindUncertainty(card),
     stats:Object.fromEntries([...card.querySelectorAll("[data-stat]")].map(el=>[el.dataset.stat,el]))};
 });
 const defaultYaw = -.54, pitch = .71;
@@ -45,8 +109,7 @@ function paintWorld(cursor) {
   const counts = [0,0,0];
   for (const site of plan.sites.slice(0,n)) counts[roomOf(site)]++;
   const future = futureIndex===null ? undefined : plan.futures?.[n-1]?.[futureIndex];
-  const label = future ? (layer === "std" ? "Simulated uncertainty" : "Simulated prediction")
-    : layer === "std" ? "Model uncertainty" : "Predicted field";
+  const label = future ? "Simulated prediction" : "Predicted field";
   if (surfaceLabel.textContent !== label) surfaceLabel.textContent = label;
   const status = wasMoving ? "Moving to next stop" : `Reading ${n} · ${value.toFixed(3)}`;
   if (sensorState.textContent !== status) sensorState.textContent = status;
@@ -75,8 +138,10 @@ function paintWorld(cursor) {
     const text = forecast ? `${forecast[0].toFixed(3)} ± ${forecast[1].toFixed(3)}` : "Route complete";
     if (forecastValue.textContent !== text) forecastValue.textContent = text;
   }
-  drawWorld(worldCanvas, data.layouts[replay.layout], plan, n, distance,
-    forecast ? plan.sites[n] : undefined, future?.[layer] ?? plan[layer][n-1]);
+  const layout=data.layouts[replay.layout];
+  drawWorld(worldCanvas,layout,plan,n,distance,forecast ? plan.sites[n] : undefined,future?.mean ?? plan.mean[n-1]);
+  worldUncertainty.heading.textContent=future ? "Simulated uncertainty" : "Uncertainty";
+  paintUncertainty(worldUncertainty,layout,future?.std ?? plan.std[n-1],ceiling,plan.sites.slice(0,n),method.color);
 }
 
 function paintDuel(cursors) {
@@ -86,7 +151,7 @@ function paintDuel(cursors) {
     const n=Math.min(frame,plan.sites.length);
     return {plan,n,measured:new Set(plan.sites.slice(0,n))};
   });
-  duelViews.forEach(({method,canvas,stats},i)=>{
+  duelViews.forEach(({method,canvas,stats,uncertainty},i)=>{
     const {plan,n,measured}=snapshots[i];
     const other=snapshots[1-i].measured;
     const cursor=cursors?.[i];
@@ -94,7 +159,6 @@ function paintDuel(cursors) {
     const counts=[0,0,0];
     for(const site of measured) counts[roomOf(site)]++;
     const values={
-      layer:layer==="std" ? "Model uncertainty" : "Predicted field",
       stage:cursor!==undefined ? "Moving to next stop" : n===plan.sites.length ? "Route complete" : `Reading ${n}`,
       distance:`${cursor===undefined ? distance : distance.toFixed(1)} / 26`,
       rmse:plan.rmse[n-1].toFixed(3), readings:`${n} / ${data.count}`
@@ -105,12 +169,14 @@ function paintDuel(cursors) {
     const rooms=["Left","Middle","Right"].map((room,j)=>`<span>${room} <b>${counts[j]}</b></span>`).join("");
     if(stats.rooms.innerHTML!==rooms) stats.rooms.innerHTML=rooms;
     const highlight={path:method.path, fill:site=>other.has(site) ? "#fafff5" : method.stop};
-    drawWorld(canvas,data.layouts[replay.layout],plan,n,distance,plan.sites[n],plan[layer][n-1],highlight);
+    const layout=data.layouts[replay.layout];
+    drawWorld(canvas,layout,plan,n,distance,plan.sites[n],plan.mean[n-1],highlight);
+    paintUncertainty(uncertainty,layout,plan.std[n-1],ceiling,measured,method.path);
   });
 }
 
 function drawWorld(canvas, layout, plan, n, distance, target, floor, highlight,
-                   floorColor = value => color(value, layer==="std")) {
+                   floorColor = value => color(value, false)) {
   const {clientWidth:width, clientHeight:height} = canvas;
   const ctx = canvas.getContext("2d");
   if (!width || !height || !ctx) return;

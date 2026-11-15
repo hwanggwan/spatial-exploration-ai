@@ -4,9 +4,9 @@
 
 **[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
 
-[![Animated comparison of greedy and rollout with synchronized uncertainty maps. Open the interactive demo.](demo/uncertainty-preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/)
+[![Greedy and rollout with uncertainty maps under shared 52-step and 24-reading caps. Open the interactive demo.](demo/shared-budget-preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/)
 
-The demo opens with **3D corridor comparison**. Replay greedy and rollout under the same 52-step and 24-reading caps or at the same actual walking distance. The timeline advances both robots by distance, with a synchronized **uncertainty map below each reconstruction** and the true field alongside. The original world-model and GP comparison remains available in **World model vs. GP**. To use the demo offline, download the standalone HTML and open `demo/index.html` in your browser. [Corridor benchmark](docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid) · [Standalone HTML file](demo/index.html)
+The GIF and the opening **3D corridor comparison** show greedy and rollout under the same 52-step and 24-reading caps. The timeline advances both robots by distance, with an **uncertainty map below each prediction** and the true field alongside. The interactive demo also offers a same-walking-distance comparison and the earlier **World model vs. GP** replay. To use the demo offline, download the standalone HTML and open `demo/index.html` in your browser. [Corridor benchmark](docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid) · [Standalone HTML file](demo/index.html)
 
 ## What we found
 
