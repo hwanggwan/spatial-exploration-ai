@@ -62,9 +62,14 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 .duel-key .both{background:white}
 @media(max-width:760px){.duel-grid{grid-template-columns:1fr}.duel-card .viewport{height:clamp(250px,57vw,390px)}}
 .refined-controls .selects{grid-template-columns:repeat(3,minmax(0,1fr))}
-.refined-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.refined-grid{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
 .refined-grid .duel-card .viewport{height:clamp(264px,27vw,350px)}
 .refined-grid .rooms{grid-template-columns:repeat(2,minmax(0,1fr))}
+.refined-uncertainty{padding:10px 12px 13px;border-top:1px solid var(--line);background:#f7faf5}
+.refined-uncertainty h3{margin:0 0 8px;font-size:14px;letter-spacing:-.015em}
+.refined-uncertainty canvas{display:block;width:min(100%,264px);height:auto;margin:auto;border:1px solid #b3c5bc;border-radius:4px;background:#f4f6ec}
+.refined-uncertainty .legend{width:min(100%,264px);margin:7px auto 0}
+.refined-uncertainty .ramp{flex:1;min-width:24px}
 .refined-truth .desc{padding:9px 12px;min-height:0}
 .duel-key .greedy-only{background:#ef8b64}.duel-key .refined-only{background:#6cccbb}
 .benchmark{margin:8px 0 20px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px}

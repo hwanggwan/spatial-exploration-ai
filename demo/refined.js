@@ -32,6 +32,14 @@ function mountRefined(){
         <div><span class="key">Readings</span><span class="number" data-stat="readings"></span></div>
       </div>
       <div class="rooms" aria-label="Readings by area" data-stat="zones"></div>
+      <section class="refined-uncertainty">
+        <h3>Uncertainty</h3>
+        <canvas width="288" height="288" role="img"
+                aria-label="${method.label} top-down uncertainty map"></canvas>
+        <div class="legend" aria-label="Posterior standard deviation color scale">
+          <span>0</span><span class="ramp uncertainty"></span><span data-uncertainty-max></span><span>Std. dev.</span>
+        </div>
+      </section>
     </article>`).join("")+`
     <article class="duel-card refined-truth" style="--route:#475e53">
       <h2>True field</h2>
@@ -40,7 +48,9 @@ function mountRefined(){
     </article>`;
   refinedViews=refinedMethods.map((method,i)=>{
     const card=container.children[i];
-    return {method, canvas:card.querySelector("canvas"),
+    return {method, canvas:card.querySelector(".viewport canvas"),
+      uncertainty:card.querySelector(".refined-uncertainty canvas"),
+      uncertaintyMax:card.querySelector("[data-uncertainty-max]"),
       stats:Object.fromEntries([...card.querySelectorAll("[data-stat]")].map(node=>[node.dataset.stat,node]))};
   });
   refinedTruth=container.querySelector(".refined-truth canvas");
@@ -84,11 +94,46 @@ function loadRefined(){
   byId("scale-min").textContent=(-refinedExtent).toFixed(1);
   byId("scale-max").textContent=refinedExtent.toFixed(1);
   byId("std-max").textContent=refinedCeiling.toFixed(1);
+  for (const view of refinedViews) view.uncertaintyMax.textContent=refinedCeiling.toFixed(1);
   byId("refined-explanation").textContent=matched
     ? "The original rollout is replayed up to greedy’s walking distance. Drag any view to rotate together."
     : "Both routes start together and use the same caps. Drag any view to rotate together.";
   showRefinedResults(matched);
   paintRefined();
+}
+
+function drawRefinedUncertainty(view, layout, values, measured) {
+  if(view.lastUncertainty===values) return;
+  view.lastUncertainty=values;
+  const canvas=view.uncertainty, ctx=canvas.getContext("2d");
+  if(!ctx) return;
+  const size=layout.size, unit=canvas.width/size;
+  const cell=site=>[site%size,size-1-Math.floor(site/size)];
+  for(let site=0;site<values.length;site++){
+    const [col,row]=cell(site);
+    const x=Math.round(col*unit), y=Math.round(row*unit);
+    ctx.fillStyle=color(values[site]/1000,true,refinedCeiling);
+    ctx.fillRect(x,y,Math.round((col+1)*unit)-x,Math.round((row+1)*unit)-y);
+  }
+  ctx.beginPath();
+  for(const [x0,y0,x1,y1] of layout.walls){
+    ctx.moveTo(x0*unit,y0*unit);
+    ctx.lineTo(x1*unit,y1*unit);
+  }
+  ctx.strokeStyle="#243d3a";
+  ctx.lineWidth=2;
+  ctx.lineCap="round";
+  ctx.stroke();
+  for(const site of measured){
+    const [col,row]=cell(site);
+    ctx.beginPath();
+    ctx.arc((col+.5)*unit,(row+.5)*unit,unit*.18,0,Math.PI*2);
+    ctx.fillStyle="#fdfdfa";
+    ctx.fill();
+    ctx.strokeStyle=view.method.path;
+    ctx.lineWidth=1.25;
+    ctx.stroke();
+  }
 }
 
 function paintRefined(){
@@ -105,7 +150,8 @@ function paintRefined(){
     const n=plan.endpoints.filter(i=>i-1<=distance+1e-9).length;
     return {plan,distance,n,measured:new Set(plan.sites.slice(0,n))};
   });
-  refinedViews.forEach(({method,canvas,stats},i)=>{
+  refinedViews.forEach((view,i)=>{
+    const {method,canvas,stats}=view;
     const {plan,distance,n,measured}=snapshots[i], other=snapshots[1-i].measured;
     const counts=[0,0,0,0];
     for(const site of measured) counts[layout.zones[site]]++;
@@ -126,6 +172,7 @@ function paintRefined(){
     const highlight={path:method.path,fill:site=>other.has(site) ? "#fafff5" : method.stop};
     drawWorld(canvas,layout,plan,n,distance,next,plan[layer][n-1],highlight,
               v=>color(v,std,std ? refinedCeiling : refinedExtent));
+    drawRefinedUncertainty(view,layout,plan.std[n-1],measured);
   });
   drawWorld(refinedTruth,layout,null,0,0,undefined,refinedScene.truth,null,
             v=>color(v,false,refinedExtent));
