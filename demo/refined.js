@@ -33,9 +33,8 @@ function mountRefined(methods, coverage){
         <div class="viewport-ui"><span class="viewport-label">Predicted field</span></div>
         <div class="viewport-bottom"><span></span><span class="sensor-state" data-stat="phase"></span></div>
       </div>
-      <div class="stats${coverage ? " coverage-stats" : ""}">
+      <div class="stats">
         <div><span class="key">Hold-out RMSE</span><span class="number" data-stat="rmse"></span></div>
-        ${coverage ? '<div><span class="key">Left room interior RMSE</span><span class="number" data-stat="interior"></span></div>' : ""}
         <div><span class="key">Steps walked</span><span class="number" data-stat="steps"></span></div>
         <div><span class="key">Readings</span><span class="number" data-stat="readings"></span></div>
       </div>
@@ -60,15 +59,15 @@ function mountRefined(methods, coverage){
 }
 
 function showCoverageResults(){
-  const {fields,scores,evaluationCells,interiorCells}=refinedScene;
+  const {fields,scores,evaluationCells}=refinedScene;
   const rows=scores.map(({budget,overall,short})=>`<tr aria-current="${budget===refinedLimit}">
     <th scope="row">${budget} steps</th>${[...overall,...short].map(value=>`<td>${value.toFixed(4)}</td>`).join("")}
     </tr>`).join("");
   byId("refined-results").innerHTML=`<thead><tr><th scope="col">Budget</th><th scope="col">Whole map · existing</th>
     <th scope="col">Whole map · min. two</th><th scope="col">Short areas · existing</th>
     <th scope="col">Short areas · min. two</th></tr></thead><tbody>${rows}</tbody>`;
-  byId("refined-result-note").textContent=`Mean RMSE across ${fields} paired mixed-range fields with weak cross-wall dependence. The replay shows one field.`;
-  byId("refined-result-detail").textContent=`This replay scores ${evaluationCells} cells unmeasured by both completed routes. The left-room interior score uses the ${interiorCells} of those cells at least five walking steps from its doorway.`;
+  byId("refined-result-note").textContent=`The table averages ${fields} paired mixed-range fields with weak cross-wall dependence.`;
+  byId("refined-result-detail").textContent=`The replay shows a selected field where requiring two readings per room lowers whole-map and short-zone RMSE. Both routes are scored on the same ${evaluationCells} unmeasured cells.`;
 }
 
 function showRefinedResults(matched){
@@ -155,7 +154,6 @@ function paintRefined(){
       rmse:plan.rmse[n-1].toFixed(4), steps:`${Math.floor(distance)} / ${refinedLimit}`,
       readings:`${n} / ${refinedData.cap}`
     };
-    if(showingRoomCoverage) values.interior=plan.interior_rmse[n-1].toFixed(4);
     for(const [key,value] of Object.entries(values)){
       if(stats[key].textContent!==value) stats[key].textContent=value;
     }

@@ -132,12 +132,12 @@ def build_residential_replay(study, root):
 
 
 def build_room_coverage_replay(study, root):
-    """Export the paired 156-step field used in the room-coverage report."""
+    """Export a paired 156-step field that illustrates a room-coverage gain."""
     config = json.loads((study / "protocol.json").read_text())
     source = json.loads((study / "summary.json").read_text())
     weights = json.loads((root / config["model"]).read_text())
     variant, start = (config["example"][k] for k in ("variant", "start"))
-    regime, profile, draw, travel = "weak", 10, 3, 156
+    regime, profile, draw, travel = "weak", 10, 2, 156
     example = dict(variant=variant, regime=regime, start=start, profile=profile, draw=draw)
     arms = ("quarter_156", "room_quota_two_156")
     routes = {row["arm"]: row for row in json.loads((study / "routes.json").read_text())
@@ -152,10 +152,6 @@ def build_room_coverage_replay(study, root):
     benchmark = np.setdiff1d(grid, np.concatenate([row["sites"] for row in routes.values()]))
     if not np.isin(held, common).all():
         raise ValueError("Room comparison measured a reserved site")
-    left = fine.room == 0
-    doors = np.flatnonzero(left & fine.movement[:, ~left].any(axis=1))
-    depth = np.rint(fine.distances[:, doors].min(axis=1) * (fine.size - 1)).astype(int)
-    interior = common[left[common] & (depth[common] >= 5)]
     with threadpool_limits(limits=1):
         profiles, kernels, prior, curve = refined_mapper(coarse, fine, anchors, weights)
         batch = next(batch for batch in field_batches(variant, fine, profiles, curve)
@@ -163,17 +159,23 @@ def build_room_coverage_replay(study, root):
         truth, readings = (values[draw] for values in batch[4:])
         short_profile = profiles[len(GLOBAL_WEIGHTS) + profile]
         short = benchmark[short_profile[fine.room[benchmark]] > 0.5]
+        example_short = common[short_profile[fine.room[common]] > 0.5]
         plans = {}
+        short_scores = []
         for arm in arms:
             route = routes[arm]
             if (route["sites"][0], len(route["sites"]), route["edges"]) != (anchors[start], config["cap"], travel):
                 raise ValueError("Room replay must match the start and both realized budgets")
             plans[arm] = pack_plan(fine, common, kernels, np.log(prior), route, truth, readings,
-                                  score_groups=dict(interior_rmse=interior, original_rmse=held, benchmark_short_rmse=short))
+                                  score_groups=dict(original_rmse=held, benchmark_short_rmse=short,
+                                                    example_short_rmse=example_short))
             plan = plans[arm]
             np.testing.assert_allclose((plan.pop("original_rmse")[-1], plan.pop("benchmark_short_rmse")[-1]),
                                        (float(metric[f"{arm}_original_rmse"]), float(metric[f"{arm}_short_rmse"])),
                                        atol=1e-10, rtol=0)
+            short_scores.append(plan.pop("example_short_rmse")[-1])
+        if not (plans[arms[1]]["rmse"][-1] < plans[arms[0]]["rmse"][-1] and short_scores[1] < short_scores[0]):
+            raise ValueError("The displayed scene should illustrate lower whole-map and short-zone RMSE")
     scores = []
     for budget in config["budgets"]:
         pair = [source["scores"][f"{method}_{budget}"] for method in ("quarter", "room_quota_two")]
@@ -181,4 +183,4 @@ def build_room_coverage_replay(study, root):
                            short=[score["short_rmse"] for score in pair]))
     return dict(layout=pack_layout(fine, np.empty(0, dtype=int)), travel=travel, cap=config["cap"], plans=plans,
                 truth=np.rint(truth * 1000).astype(int).tolist(), scores=scores, fields=source["fields"],
-                interiorCells=len(interior), evaluationCells=len(common))
+                evaluationCells=len(common))

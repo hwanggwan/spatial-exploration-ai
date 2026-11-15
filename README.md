@@ -20,7 +20,7 @@ The opening replay compares the existing rollout with a policy that measures at 
 
 The table averages **448 paired synthetic fields** with short- and long-range zones and weak cross-wall dependence. All six policies share a 24-reading cap and are evaluated on cells unmeasured by all six routes. For the six starts where the minimum-two policy took exactly 24 readings at both 104 and 156 steps, the longer route lowered short-zone RMSE by **0.0396** (paired 95% interval [−0.0498, −0.0291]). At 156 steps, the comparison between policies on starts where both took 24 readings had a whole-map RMSE difference of −0.0031 [−0.0102, +0.0039]. [Protocol and paired results](docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap)
 
-In the replayed field, the room requirement increased the lower-left room's readings from one to six. RMSE in that room's interior went from **0.877 to 0.541**, while whole-map RMSE went from **0.645 to 0.652**. [See the true field and close-up predictions](demo/room-coverage-maps.png).
+The replay shows one selected field where the room requirement improves whole-map RMSE from **0.721 to 0.673** and short-zone RMSE from **0.772 to 0.681**. Both routes use 156 steps and 24 readings, and the comparison scores the same 484 unmeasured cells. [See the true field and predicted maps](demo/room-coverage-maps.png).
 
 ### Earlier benchmarks
 
