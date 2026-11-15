@@ -1,8 +1,10 @@
 # Field Routes
 
-Open the [live demo](https://hwanggwan.github.io/spatial-exploration-ai/) in a browser, or open `index.html` locally to use it offline. The **3D corridor comparison** shows greedy and rollout on the 23 × 23 grid with the true field alongside. It has six replays spanning two corridor layouts and short, long, and mixed-range fields. **Shared budget caps** lets both planners run under the 52-step and 24-reading limits. **Same walking distance** replays the archived rollout up to greedy's stopping distance. The timeline aligns by walking steps, and the table below the scene reports aggregate results across the benchmark fields. [Corridor benchmark](../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid)
+Open the [live demo](https://hwanggwan.github.io/spatial-exploration-ai/) in a browser, or open `index.html` locally to use it offline. The **Room coverage** replay shows the existing rollout and minimum-two-per-room rollout. The same-start example uses 156 walking steps and 24 readings per route. Its left-room interior score covers cells at least five walking steps from the doorway that both routes leave unmeasured. [Room-coverage benchmark](../docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap)
 
-Each predicted map has a top-down uncertainty map beneath it, with a shared posterior standard deviation scale for methods in the same view. Dots mark readings taken so far. The README animation shows the corridor routes through their full shared-budget replay.
+Select **Greedy vs. rollout** for six replays on the same 23 × 23 grid spanning two corridor layouts and short, long, and mixed-range fields. **Shared budget caps** lets both planners run under the 52-step and 24-reading limits. **Same walking distance** replays the archived rollout up to greedy's stopping distance. The timeline aligns by walking steps, and the table below the scene reports aggregate results across the benchmark fields. [Corridor benchmark](../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid)
+
+Each predicted map has a top-down uncertainty map beneath it, with a shared posterior standard deviation scale for methods in the same view. Dots mark readings taken so far. The README animation shows the room-coverage replay at sampled walking distances.
 
 **World model vs. GP** shows the earlier 26-step, 16-reading comparison. Its timeline aligns by measurement count. Stop colors distinguish shared locations from sites that only one planner has measured at the current frame.
 
@@ -37,5 +39,20 @@ python tools/build_three_room_demo.py
 ```
 
 The builder checks terminal and equal-travel RMSEs against the benchmark archive and writes `demo/index.html`.
+
+To generate the room-coverage replay from the refined corridor archive, run the following benchmarks. The adaptive and oracle runs provide paired field scores and reference routes for the room and travel budget studies.
+
+```sh
+python tools/audit_residential_early_rollout.py
+python tools/audit_residential_early_rollout.py --include-quarter
+python tools/audit_residential_room_rollout.py
+python tools/audit_residential_adaptive_rollout.py
+python tools/audit_residential_adaptive_rollout.py --prioritize-short
+python tools/audit_residential_adaptive_rollout.py --oracle-short
+python tools/audit_residential_adaptive_rollout.py --match-oracle-bonus
+python tools/audit_residential_room_quota.py --minimum 2
+python tools/audit_residential_travel_budget.py
+python tools/build_three_room_demo.py
+```
 
 The live demo is served by GitHub Pages from the `gh-pages` branch. That branch contains the standalone replay as `index.html` and a `.nojekyll` marker. To update it, regenerate the replay on `main` and copy the new HTML to the publishing branch, pointing the experiment links to the repository reports.

@@ -149,15 +149,18 @@ def main():
     parser.add_argument("--learned-replay", type=Path, default=ROOT / "outputs/sensing-world-study/replay.json")
     parser.add_argument("--rollout-replay", type=Path, default=ROOT / "outputs/sensing-world-rollout/replay.json")
     parser.add_argument("--refined-study", type=Path, default=ROOT / "outputs/sensing-world-residential-refined-rollout")
+    parser.add_argument("--coverage-study", type=Path, default=ROOT / "outputs/sensing-world-residential-travel-budget")
     parser.add_argument("--output", type=Path, default=ROOT / "demo/index.html")
     args = parser.parse_args()
     template = (ROOT / "demo/index.template.html").read_text(encoding="utf8")
     data = build_data(args.source, args.learned_replay, args.rollout_replay)
     refined = None
     if args.refined_study.is_dir():
-        from build_residential_replay import build_residential_replay
+        from build_residential_replay import build_residential_replay, build_room_coverage_replay
 
         refined = build_residential_replay(args.refined_study, ROOT)
+        if args.coverage_study.is_dir():
+            refined["roomCoverage"] = build_room_coverage_replay(args.coverage_study, ROOT)
     replacements = {
         TOKEN: json.dumps(data, separators=(",", ":")),
         REFINED_DATA_TOKEN: json.dumps(refined, separators=(",", ":")),
@@ -172,7 +175,8 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(template, encoding="utf8")
     n_refined = len(refined["cases"]) if refined else 0
-    print(f"Exported {n_refined} corridor and {len(data['cases'])} three-room replays to {args.output}")
+    n_coverage = int(bool(refined and refined.get("roomCoverage")))
+    print(f"Exported {n_refined} corridor, {n_coverage} room coverage, and {len(data['cases'])} three-room replays to {args.output}")
 
 
 if __name__ == "__main__":

@@ -2,13 +2,27 @@
 
 **Where should a robot take its next reading?** Field Routes simulates a robot mapping an unknown sensor field inside a known floor plan. It can walk through doors and collect noisy readings along the way. The goal is to reconstruct the field as accurately as possible within the travel and sensing limits.
 
-**[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
+**[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
 
-[![Greedy and rollout with uncertainty maps under shared 52-step and 24-reading caps. Open the interactive demo.](demo/shared-budget-preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/)
+[![Two robots mapping the same field with 156 walking steps and 24 sensor readings each. Open the interactive replay.](demo/room-coverage-preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage)
 
-The GIF and the opening **3D corridor comparison** show greedy and rollout under the same 52-step and 24-reading caps. The timeline advances both robots by distance, with an **uncertainty map below each prediction** and the true field alongside. The interactive demo also offers a same-walking-distance comparison and the earlier **World model vs. GP** replay. To use the demo offline, download the standalone HTML and open `demo/index.html` in your browser. [Corridor benchmark](docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid) · [Standalone HTML file](demo/index.html)
+The opening replay compares the existing rollout with a policy that measures at least two distinct sites in each room. Both robots walk **156 steps** and take **24 readings**. Move the timeline to see their predictions and uncertainty after each reading, with the true field alongside. The experiment selector also opens the earlier [52-step greedy comparison](https://hwanggwan.github.io/spatial-exploration-ai/#greedy-rollout). To use the demo offline, download and open the [standalone HTML](demo/index.html).
 
 ## What we found
+
+**A room requirement improves coverage. Extra walking distance helps the robot reach useful sites inside those rooms.** Across eight layout/start pairs, the two-site requirement obtained at least two readings in every room on all eight 52-step routes, compared with zero of eight for the unconstrained rollout. At that budget, whole-map error was similar and short-zone error increased. At 104 and 156 steps, both map errors fell for both policies.
+
+| Walking steps | Whole-map RMSE · existing / min. two | Short-zone RMSE · existing / min. two |
+| ---: | ---: | ---: |
+| 52 | 0.7435 / 0.7456 | 0.7977 / 0.8127 |
+| 104 | 0.6622 / 0.6451 | 0.7353 / 0.7243 |
+| 156 | 0.6259 / 0.6118 | 0.7030 / 0.6887 |
+
+The table averages **448 paired synthetic fields** with short- and long-range zones and weak cross-wall dependence. All six policies share a 24-reading cap and are evaluated on cells unmeasured by all six routes. For the six starts where the minimum-two policy took exactly 24 readings at both 104 and 156 steps, the longer route lowered short-zone RMSE by **0.0396** (paired 95% interval [−0.0498, −0.0291]). At 156 steps, the comparison between policies on starts where both took 24 readings had a whole-map RMSE difference of −0.0031 [−0.0102, +0.0039]. [Protocol and paired results](docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap)
+
+In the replayed field, the room requirement increased the lower-left room's readings from one to six. RMSE in that room's interior went from **0.877 to 0.541**, while whole-map RMSE went from **0.645 to 0.652**. [See the true field and close-up predictions](demo/room-coverage-maps.png).
+
+### Earlier benchmarks
 
 On three unequal rooms, **priority allocation mapped the field more accurately than equal allocation while walking less**. Rollout had the lowest error at the shared budget cap and still improved on priority allocation when limited to the same actual walking distance.
 

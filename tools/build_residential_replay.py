@@ -7,8 +7,9 @@ import numpy as np
 from threadpoolctl import threadpool_limits
 
 from audit_residential_grid_resolution import holdouts, predictions, refine_geometry, refined_mapper
-from audit_residential_refined_rollout import ARM_ROLLOUT, MATCHED_ARMS, PLANNER_ARMS, field_batches
+from audit_residential_refined_rollout import ARM_ROLLOUT, MATCHED_ARMS, PLANNER_ARMS, field_batches, field_key
 from audit_residential_routes import LayoutCase, floor_plan
+from audit_residential_zone_ranges import GLOBAL_WEIGHTS
 
 
 GREEDY = PLANNER_ARMS[1]
@@ -46,7 +47,7 @@ def choose_examples(metrics, variant, start):
     return selected
 
 
-def pack_plan(layout, held, kernels, log_prior, route, truth, readings):
+def pack_plan(layout, held, kernels, log_prior, route, truth, readings, *, score_groups=None):
     sites = np.asarray(route["sites"])
     walk = np.asarray(route["walk"])
     distance = np.rint(layout.distances[sites[:-1], sites[1:]] * (layout.size - 1)).astype(int)
@@ -56,14 +57,18 @@ def pack_plan(layout, held, kernels, log_prior, route, truth, readings):
         raise ValueError("Invalid corridor replay route")
     targets = np.arange(len(truth))
     mean, std, errors = [], [], []
+    groups = {name: [] for name in score_groups} if score_groups else {}
     for count in range(1, len(sites) + 1):
         measured = sites[:count]
         pred, sd = predictions(kernels, measured, readings[measured][None], targets, log_prior)
         mean.append(np.rint(pred[0] * 1000).astype(int).tolist())
         std.append(np.rint(sd[0] * 1000).astype(int).tolist())
         errors.append(float(np.sqrt(np.mean((pred[0, held] - truth[held])**2))))
+        for name in groups:
+            group = score_groups[name]
+            groups[name].append(float(np.sqrt(np.mean((pred[0, group] - truth[group])**2))))
     return dict(sites=sites.tolist(), walk=walk.tolist(), endpoints=(arrivals + 1).tolist(),
-                mean=mean, std=std, rmse=errors)
+                mean=mean, std=std, rmse=errors, **groups)
 
 
 def build_residential_replay(study, root):
@@ -124,3 +129,56 @@ def build_residential_replay(study, root):
             matched=[stats["means"][GREEDY]["all"], stats["means"][MATCHED_ARMS[GREEDY]]["all"]],
             interval=stats["matched_travel_rollout_minus"][GREEDY]["all"]["ci95"])
     return dict(layouts=layouts, cases=cases, results=results, cap=config["cap"], travel=config["fine_edge_cap"])
+
+
+def build_room_coverage_replay(study, root):
+    """Export the paired 156-step field used in the room-coverage report."""
+    config = json.loads((study / "protocol.json").read_text())
+    source = json.loads((study / "summary.json").read_text())
+    weights = json.loads((root / config["model"]).read_text())
+    variant, start = (config["example"][k] for k in ("variant", "start"))
+    regime, profile, draw, travel = "weak", 10, 3, 156
+    example = dict(variant=variant, regime=regime, start=start, profile=profile, draw=draw)
+    arms = ("quarter_156", "room_quota_two_156")
+    routes = {row["arm"]: row for row in json.loads((study / "routes.json").read_text())
+              if (row["variant"], row["start"]) == (variant, start)}
+    with (study / "fields.csv").open() as stream:
+        metric = next(row for row in csv.DictReader(stream) if field_key(row) == field_key(example))
+    coarse = floor_plan(LayoutCase("corridor", variant))
+    fine, anchors = refine_geometry(coarse)
+    held, _ = holdouts(coarse, fine, anchors, variant)
+    grid = np.arange(len(fine.room))
+    common = np.setdiff1d(grid, np.concatenate([routes[arm]["sites"] for arm in arms]))
+    benchmark = np.setdiff1d(grid, np.concatenate([row["sites"] for row in routes.values()]))
+    if not np.isin(held, common).all():
+        raise ValueError("Room comparison measured a reserved site")
+    left = fine.room == 0
+    doors = np.flatnonzero(left & fine.movement[:, ~left].any(axis=1))
+    depth = np.rint(fine.distances[:, doors].min(axis=1) * (fine.size - 1)).astype(int)
+    interior = common[left[common] & (depth[common] >= 5)]
+    with threadpool_limits(limits=1):
+        profiles, kernels, prior, curve = refined_mapper(coarse, fine, anchors, weights)
+        batch = next(batch for batch in field_batches(variant, fine, profiles, curve)
+                     if batch[:4] == (regime, start, profile, "mixed"))
+        truth, readings = (values[draw] for values in batch[4:])
+        short_profile = profiles[len(GLOBAL_WEIGHTS) + profile]
+        short = benchmark[short_profile[fine.room[benchmark]] > 0.5]
+        plans = {}
+        for arm in arms:
+            route = routes[arm]
+            if (route["sites"][0], len(route["sites"]), route["edges"]) != (anchors[start], config["cap"], travel):
+                raise ValueError("Room replay must match the start and both realized budgets")
+            plans[arm] = pack_plan(fine, common, kernels, np.log(prior), route, truth, readings,
+                                  score_groups=dict(interior_rmse=interior, original_rmse=held, benchmark_short_rmse=short))
+            plan = plans[arm]
+            np.testing.assert_allclose((plan.pop("original_rmse")[-1], plan.pop("benchmark_short_rmse")[-1]),
+                                       (float(metric[f"{arm}_original_rmse"]), float(metric[f"{arm}_short_rmse"])),
+                                       atol=1e-10, rtol=0)
+    scores = []
+    for budget in config["budgets"]:
+        pair = [source["scores"][f"{method}_{budget}"] for method in ("quarter", "room_quota_two")]
+        scores.append(dict(budget=budget, overall=[score["common_rmse"] for score in pair],
+                           short=[score["short_rmse"] for score in pair]))
+    return dict(layout=pack_layout(fine, np.empty(0, dtype=int)), travel=travel, cap=config["cap"], plans=plans,
+                truth=np.rint(truth * 1000).astype(int).tolist(), scores=scores, fields=source["fields"],
+                interiorCells=len(interior), evaluationCells=len(common))

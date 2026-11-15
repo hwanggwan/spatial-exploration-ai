@@ -8,6 +8,7 @@ from time import perf_counter
 from types import SimpleNamespace
 
 import numpy as np
+from scipy.linalg import solve_triangular
 from threadpoolctl import threadpool_limits
 
 from audit_residential_grid_resolution import (
@@ -32,7 +33,41 @@ SCENARIOS = ("short", "mixed", "long")
 SHORTLIST_PER_SCORE = 8
 
 
-def full_budget_route(layout, allowed, prior, start, distance_cap):
+def remaining_variance(covariance, distances, start, sites, noise_variance, remaining, distance_cap,
+                       *, room_masks=(), room_weight=0.0, target_weights=None):
+    """Return the terminal score and variance integral per original budget.
+
+    Optional target weights sum to one and replace the uniform mean over cells.
+    """
+    sites = np.asarray(sites, dtype=int)
+    observed = covariance[np.ix_(sites, sites)] + noise_variance * np.eye(len(sites))
+    factor = np.linalg.cholesky(observed)
+    cross = solve_triangular(factor, covariance[sites], lower=True, check_finite=False)
+    # Each Cholesky row is the additional posterior update at that stop.
+    squared_cross = cross**2
+    if target_weights is None:
+        reductions = squared_cross.mean(axis=1)
+        current = float(np.trace(covariance) / len(covariance))
+    else:
+        reductions = squared_cross @ target_weights
+        current = float(covariance.diagonal() @ target_weights)
+    departures = np.r_[start, sites[:-1]]
+    arrivals = distances[departures, sites].cumsum()
+    terminal = current - reductions.sum()
+    integral = (current * remaining - reductions @ np.maximum(remaining - arrivals, 0.0)) / distance_cap
+    if room_weight:
+        final_diagonal = covariance.diagonal() - squared_cross.sum(axis=0)
+        worst_room = max(final_diagonal[mask].mean() for mask in room_masks)
+        terminal = (1 - room_weight) * terminal + room_weight * worst_room
+    return terminal, integral
+
+
+def full_budget_route(layout, allowed, prior, start, distance_cap, *, early_weight=0.0,
+                      room_masks=(), room_weight=0.0):
+    if not 0 <= early_weight <= 1 or not 0 <= room_weight <= 1:
+        raise ValueError("Variance weights must be between zero and one")
+    if room_weight and not room_masks:
+        raise ValueError("A room-weighted score requires room masks")
     belief = GPBelief(prior, NOISE)
     belief.observe(start, 0.0)
     sites = [start]
@@ -51,8 +86,15 @@ def full_budget_route(layout, allowed, prior, start, distance_cap):
         per_distance = np.argsort(-(gains / costs[feasible]), kind="stable")[:SHORTLIST_PER_SCORE]
         absolute = np.argsort(-gains, kind="stable")[:SHORTLIST_PER_SCORE]
         shortlist = feasible[np.union1d(per_distance, absolute)]
+        def combined_score(suffix):
+            terminal, integral = remaining_variance(belief.covariance, layout.distances, current, suffix,
+                                                     belief.noise_variance, remaining, distance_cap,
+                                                     room_masks=room_masks, room_weight=room_weight)
+            return (1 - early_weight) * terminal + early_weight * integral
+
         plan = plan_rollout(belief.covariance, layout.distances, current, visited, allowed,
                             remaining, belief.noise_variance, remaining_observations=CAP-len(sites),
+                            terminal_variance=combined_score if early_weight or room_weight else None,
                             first_move_candidates=shortlist)
         action = plan.first
         branches += plan.candidates_evaluated

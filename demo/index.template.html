@@ -63,8 +63,11 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 .duel-key .both{background:white}
 @media(max-width:760px){.duel-grid{grid-template-columns:1fr}.duel-card .viewport{height:clamp(250px,57vw,390px)}}
 .refined-controls .selects{grid-template-columns:repeat(3,minmax(0,1fr))}
+.refined-controls .selects.has-study-selector{grid-template-columns:repeat(4,minmax(0,1fr))}
+.refined-controls .selects.coverage-controls{grid-template-columns:minmax(0,410px)}
 .refined-grid{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
 .refined-grid .duel-card .viewport{height:clamp(264px,27vw,350px)}
+.refined-grid .coverage-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
 .refined-grid .rooms{grid-template-columns:repeat(2,minmax(0,1fr))}
 .uncertainty-panel{padding:10px 12px 13px;border-top:1px solid var(--line);background:#f7faf5}
 .uncertainty-panel h3{margin:0 0 8px;font-size:14px;letter-spacing:-.015em}
@@ -83,7 +86,7 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 .benchmark td{font-variant-numeric:tabular-nums}
 .benchmark a{color:var(--teal)}
 @media(max-width:900px){.refined-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.refined-truth{grid-column:1/-1}.refined-grid .refined-truth .viewport{height:270px}}
-@media(max-width:630px){.refined-controls .selects{grid-template-columns:repeat(2,minmax(0,1fr))}.refined-controls .selects label:last-child{grid-column:1/-1}.refined-grid{grid-template-columns:1fr}.refined-grid .duel-card .viewport{height:280px}.benchmark th,.benchmark td{padding:6px 4px}}
+@media(max-width:630px){.refined-controls .selects,.refined-controls .selects.has-study-selector{grid-template-columns:repeat(2,minmax(0,1fr))}.refined-controls .selects.coverage-controls{grid-template-columns:1fr}.refined-grid{grid-template-columns:1fr}.refined-grid .duel-card .viewport{height:280px}.benchmark th,.benchmark td{padding:6px 4px}}
 </style>
 </head>
 <body>
@@ -94,10 +97,11 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 <div class="limits" aria-label="Resource caps"><span id="reading-cap">24 readings max</span><span id="travel-cap">52 walking steps max</span></div>
 </section>
 <section class="control refined-controls" id="refined-controls" aria-label="Corridor replay controls" hidden>
-<div class="selects">
-<label><span class="key">Floor plan</span><select id="refined-layout"><option value="1">Corridor B</option><option value="0">Corridor A</option></select></label>
-<label><span class="key">Sensor field</span><select id="refined-field"><option value="short">Short range</option><option value="mixed">Mixed by area</option><option value="long">Long range</option></select></label>
-<label><span class="key">Compare at</span><select id="refined-budget"><option value="caps">Shared budget caps</option><option value="matched">Same walking distance</option></select></label>
+<div class="selects" id="refined-selects">
+<label id="refined-study-label" hidden><span class="key">Experiment</span><select id="refined-study"><option value="coverage">Room coverage · 156 steps</option><option value="greedy" selected>Greedy vs. rollout · 52 steps</option></select></label>
+<label data-greedy-control><span class="key">Floor plan</span><select id="refined-layout"><option value="1">Corridor B</option><option value="0">Corridor A</option></select></label>
+<label data-greedy-control><span class="key">Sensor field</span><select id="refined-field"><option value="short">Short range</option><option value="mixed">Mixed by area</option><option value="long">Long range</option></select></label>
+<label data-greedy-control><span class="key">Compare at</span><select id="refined-budget"><option value="caps">Shared budget caps</option><option value="matched">Same walking distance</option></select></label>
 </div>
 <div class="timeline">
 <button type="button" class="play" id="refined-play">▶ Play</button>
@@ -132,7 +136,7 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 </div>
 <div class="legend" aria-label="Sensor value color scale"><span id="scale-min"></span><span class="ramp"></span><span id="scale-max"></span><span>Sensor value</span></div>
 </div>
-<section id="refined" aria-label="Greedy and rollout corridor comparison" hidden>
+<section id="refined" aria-label="Corridor route comparison" hidden>
 <div class="duel-top">
 <p id="refined-explanation"></p>
 <div class="camera duel-camera" role="group" aria-label="Shared corridor camera">
@@ -145,15 +149,15 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 <div class="mapkey duel-key" aria-label="Corridor route symbols">
 <span><i class="symbol"></i>Shared start</span>
 <span><i class="symbol stop both"></i>Measured by both</span>
-<span><i class="symbol stop greedy-only"></i>Greedy only</span>
-<span><i class="symbol stop refined-only"></i>Rollout only</span>
+<span><i class="symbol stop greedy-only"></i><span id="refined-left-label">Greedy only</span></span>
+<span><i class="symbol stop refined-only"></i><span id="refined-right-label">Rollout only</span></span>
 </div>
 <section class="benchmark" aria-labelledby="refined-result-title">
 <h2 id="refined-result-title">Benchmark RMSE</h2>
 <p id="refined-result-note"></p>
 <table id="refined-results"></table>
 <p id="refined-result-detail"></p>
-<p><a href="../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid">Protocol and full results</a></p>
+<p><a id="refined-report" href="../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid">Protocol and full results</a></p>
 </section>
 </section>
 <section id="duel" aria-label="Side-by-side 3D rollout comparison" hidden>
