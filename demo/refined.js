@@ -18,7 +18,8 @@ const refinedPlay = byId("refined-play");
 const refinedStudy = byId("refined-study");
 const coverageLayout = byId("coverage-layout");
 const coverageScenes = refinedData?.roomCoverage ? [refinedData.roomCoverage,...(refinedData.roomCoverage.alternatives ?? [])] : [];
-const defaultCoverage = coverageScenes.find(scene=>scene.adaptive) ?? coverageScenes[0];
+const defaultCoverage = coverageScenes.find(scene=>scene.adaptive && scene.id==="corridor")
+  ?? coverageScenes.find(scene=>scene.adaptive) ?? coverageScenes[0];
 let refinedScene, refinedLayout, refinedLimit, refinedExtent, refinedCeiling, refinedPosition=0, refinedAnimation=null;
 let showingRoomCoverage, mountedMethods;
 let refinedViews=[], refinedTruth;
@@ -227,7 +228,9 @@ function seekRefined(step){
 byId("refined-study-label").hidden=!refinedData?.roomCoverage;
 byId("refined-selects").classList.toggle("has-study-selector",Boolean(refinedData?.roomCoverage));
 refinedStudy.value=refinedData?.roomCoverage && location.hash!=="#greedy-rollout" ? "coverage" : "greedy";
-const floorPlans=defaultCoverage?.adaptive ? [...coverageScenes.slice(1),coverageScenes[0]] : coverageScenes;
+const floorPlans=defaultCoverage?.adaptive
+  ? [defaultCoverage,...coverageScenes.filter(scene=>scene.adaptive && scene!==defaultCoverage),
+    ...coverageScenes.filter(scene=>!scene.adaptive)] : coverageScenes;
 coverageLayout.replaceChildren(...floorPlans.map(scene=>new Option(
   scene.scores && defaultCoverage?.adaptive ? "Corridor · fixed range weights" : scene.label, scene.id)));
 const prefix="#room-coverage-";

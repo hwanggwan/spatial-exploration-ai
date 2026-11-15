@@ -2,11 +2,11 @@
 
 **Where should a robot take its next reading?** Field Routes simulates a robot mapping an unknown sensor field inside a known floor plan. It can walk through doors and collect noisy readings along the way. The goal is to reconstruct the field as accurately as possible within the travel and sensing limits.
 
-**[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
+**[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-corridor)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
 
-[![Two adaptive rollouts mapping the same field with 156 walking steps and 24 sensor readings each. Open the interactive replay.](demo/adaptive-room-coverage-preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row)
+[![Two adaptive rollouts map three rooms off a corridor with 156 walking steps and 24 readings each. Open the interactive replay.](demo/adaptive-corridor-preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-corridor)
 
-Both planners update the spatial covariance from their sensor readings before choosing where to measure next. One planner also reserves enough budget to measure at least two distinct sites in each room. In the opening replay, both start at the same point, walk **156 steps**, and take **24 readings**. Drag the timeline to see how their routes, predictions, and uncertainty evolve alongside the true field. [Standalone HTML](demo/index.html)
+Both planners update the spatial covariance from their sensor readings before choosing where to measure next. One planner also reserves enough budget to measure at least two distinct sites in each room. In the selected corridor replay, both start together, walk **156 steps**, and take **24 readings**. The room requirement lowers whole-map RMSE from **0.5579 to 0.4970**. Drag the timeline to follow the two routes and compare their prediction and uncertainty maps alongside the true field. [Standalone HTML](demo/index.html)
 
 The adaptive replays show selected fields where the room requirement improves both error measures. The floor-plan selector covers three layouts and includes the earlier fixed-weight corridor replay. [Three rooms in a row](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row) · [Four-room loop](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-loop) · [Corridor](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-corridor)
 
@@ -16,15 +16,15 @@ The adaptive replays show selected fields where the room requirement improves bo
 
 | Floor plan | Dependence across walls | Whole-map win rate | Short-range win rate | Mean RMSE change, whole / short |
 | --- | --- | ---: | ---: | ---: |
+| Three rooms off a corridor | Weak | 54.2% | 49.6% | −0.0104 / −0.0079 |
 | Three rooms in a row | Weak | 53.7% | 54.0% | −0.0089 / −0.0128 |
 | Four-room loop | Weak | 34.7% | 33.6% | −0.0045 / −0.0040 |
-| Three rooms off a corridor | Weak | 54.2% | 49.6% | −0.0104 / −0.0079 |
 | Three rooms in a row | Strong | 54.7% | 53.1% | −0.0088 / −0.0082 |
 | Four-room loop | Strong | 34.9% | 33.6% | −0.0046 / −0.0050 |
 
-In the loop, the policies measure identical sites in about 37% of pairs and obtain the same RMSE. Among weak-wall pairs that measure different sites, the loop win rates are 54.8% and 53.0%. In the row layout, requiring two readings removes the 44 coverage misses seen in 3,072 unconstrained runs. [Row and loop results](docs/residential-floor-plan-study.md#updating-the-planning-covariance-at-each-reading)
-
 The corridor requirement removes 42 coverage misses across 448 runs. Among the 330 pairs that use all 156 steps and all 24 readings, mean whole-map RMSE drops by 0.0059 and short-range RMSE stays nearly unchanged. [Corridor results](docs/residential-floor-plan-study.md#adaptive-rollout-on-corridor-layouts)
+
+In the loop, the policies measure identical sites in about 37% of pairs and obtain the same RMSE. Among weak-wall pairs that measure different sites, the loop win rates are 54.8% and 53.0%. In the row layout, requiring two readings removes the 44 coverage misses seen in 3,072 unconstrained runs. [Row and loop results](docs/residential-floor-plan-study.md#updating-the-planning-covariance-at-each-reading)
 
 ### Earlier benchmarks
 
