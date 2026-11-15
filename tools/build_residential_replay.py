@@ -7,10 +7,11 @@ import json
 import numpy as np
 from threadpoolctl import threadpool_limits
 
+from audit_residential_adaptive_coverage import coverage_field_batches
 from audit_residential_grid_resolution import expand_walk, holdouts, predictions, refine_geometry, refined_mapper
-from audit_residential_layout_coverage import ARMS as COVERAGE_POLICIES, mixed_field_batches
+from audit_residential_layout_coverage import ARMS as COVERAGE_POLICIES
 from audit_residential_refined_rollout import ARM_ROLLOUT, MATCHED_ARMS, PLANNER_ARMS, field_batches, field_key
-from audit_residential_room_quota import TwoReadingCompletion, plan_route
+from audit_residential_room_quota import ROOMS, TwoReadingCompletion, plan_route
 from audit_residential_routes import LayoutCase, floor_plan
 from audit_residential_zone_ranges import GLOBAL_WEIGHTS
 
@@ -19,6 +20,7 @@ GREEDY = PLANNER_ARMS[1]
 ARMS = (GREEDY, ARM_ROLLOUT)
 RANGES = ("short", "mixed", "long")
 COVERAGE_ARMS = ("quarter_156", "room_quota_two_156")
+CORRIDOR_ZONES = ["Lower-left room", "Lower-right room", "Corridor", "Upper room"]
 ADDITIONAL_ROOM_CASES = (
     ("row", "Three rooms in a row", 64, 1, 1, ("Left room", "Middle room", "Right room")),
     ("loop", "Four-room loop", 128, 0, 1, ("Lower-left room", "Lower-right room", "Upper-left room", "Upper-right room")),
@@ -139,7 +141,7 @@ def build_residential_replay(study, root):
     return dict(layouts=layouts, cases=cases, results=results, cap=config["cap"], travel=config["fine_edge_cap"])
 
 
-def build_room_coverage_replay(study, root, adaptive_study=None):
+def build_room_coverage_replay(study, root, adaptive_study=None, adaptive_corridor=None):
     """Export a paired 156-step field that illustrates a room-coverage gain."""
     config = json.loads((study / "protocol.json").read_text())
     source = json.loads((study / "summary.json").read_text())
@@ -191,8 +193,10 @@ def build_room_coverage_replay(study, root, adaptive_study=None):
                            short=[score["short_rmse"] for score in pair]))
     alternatives = (build_adaptive_room_replays(adaptive_study, root, travel, config["cap"])
                     if adaptive_study else build_additional_room_replays(weights, travel, config["cap"]))
-    return dict(id="corridor", label="Three rooms off a corridor",
-                zoneNames=["Lower-left room", "Lower-right room", "Corridor", "Upper room"],
+    if adaptive_corridor:
+        alternatives.extend(build_adaptive_room_replays(adaptive_corridor, root, travel, config["cap"]))
+    return dict(id="corridor-fixed" if adaptive_corridor else "corridor", label="Three rooms off a corridor",
+                zoneNames=CORRIDOR_ZONES,
                 shortZones=(short_profile > 0.5).tolist(), alternatives=alternatives,
                 layout=pack_layout(fine, np.empty(0, dtype=int)), travel=travel, cap=config["cap"], plans=plans,
                 truth=np.rint(truth * 1000).astype(int).tolist(), scores=scores, fields=source["fields"],
@@ -247,10 +251,12 @@ def build_adaptive_room_replays(study, root, travel, cap):
     """Export a resource-matched adaptive example and benchmark per floor-plan family."""
     archive = json.loads((study / "protocol.json").read_text())
     source = archive["source"]
-    draws = source["draws_per_profile"]
+    draws = archive.get("draws_per_profile", source.get("draws_per_profile"))
     model = (root / source["model"]).read_bytes()
+    source_travel = source.get("travel_cap", max(source.get("budgets", (0,))))
+    source_cap = source.get("reading_cap", source.get("cap"))
     if (archive["method"] != "adaptive_rollout" or hashlib.sha256(model).hexdigest() != archive["model_sha256"]
-            or (source["travel_cap"], source["reading_cap"]) != (travel, cap)):
+            or (source_travel, source_cap) != (travel, cap)):
         raise ValueError("Adaptive replay protocol and frozen mapper must match the benchmark")
     mapper = json.loads(model)
     summary = json.loads((study / f"summary-{draws}.json").read_text())
@@ -263,8 +269,13 @@ def build_adaptive_room_replays(study, root, travel, cap):
 
     by_key = {(key(row), row["arm"]): row for row in saved_routes}
     replays = []
+    layouts = [(family, label, zones) for family, label, _, _, _, zones in ADDITIONAL_ROOM_CASES]
+    layouts.append(("corridor", "Three rooms off a corridor", CORRIDOR_ZONES))
     with threadpool_limits(limits=1):
-        for family, label, _, _, _, zone_names in ADDITIONAL_ROOM_CASES:
+        for family, label, zone_names in layouts:
+            if family not in summary:
+                continue
+            rooms = ROOMS if family == "corridor" else range(len(zone_names))
             winners = []
             for row in metrics:
                 if (row["family"], row["regime"], row["full_resources"]) != (family, "weak", "True"):
@@ -274,22 +285,28 @@ def build_adaptive_room_replays(study, root, travel, cap):
                                           for metric in ("whole", "short"))
                 if whole_gain > 0 and short_gain > 0:
                     baseline = by_key[key(row), COVERAGE_POLICIES[0]]
-                    winners.append((min(baseline["room_readings"]) < 2, whole_gain, row))
+                    missed_room = min(baseline["room_readings"][room] for room in rooms) < 2
+                    winners.append((missed_room, whole_gain, short_gain, row))
             missed_room = any(item[0] for item in winners)
             winners = sorted((item for item in winners if item[0] == missed_room), key=lambda item: item[1])
             if not winners:
                 raise ValueError(f"No adaptive {family} example meets both budgets and improves both scores")
-            _, _, example = winners[(len(winners) - 1) // 2]
+            if family == "corridor":
+                # Keep both displayed gains near the median among qualifying scenes.
+                typical = np.median([item[1:3] for item in winners], axis=0)
+                example = min(winners, key=lambda item: np.abs(np.asarray(item[1:3]) / typical - 1).sum())[-1]
+            else:
+                example = winners[(len(winners) - 1) // 2][-1]
             variant, start, profile_id, draw = (int(example[k]) for k in ("variant", "start", "profile", "draw"))
             case = LayoutCase(family, variant)
             coarse = floor_plan(case)
             fine, anchors = refine_geometry(coarse)
             held, _ = holdouts(coarse, fine, anchors, variant)
             profiles, kernels, weights, curve = refined_mapper(coarse, fine, anchors, mapper)
-            _, _, values, fields, sensor = next(
-                batch for batch in mixed_field_batches(case, fine, profiles[len(GLOBAL_WEIGHTS):], curve, draws, ("weak",))
-                if batch[1] == profile_id
-            )
+            field_key_at_start = ("weak", start if family == "corridor" else None, profile_id)
+            values, fields, sensor = next((values, fields, sensor) for batch_key, values, fields, sensor in
+                                          coverage_field_batches(case, fine, profiles, curve, draws, ("weak",))
+                                          if batch_key == field_key_at_start)
             truth, readings = fields[draw], sensor[draw]
             routes = [by_key[key(example), arm].copy() for arm in COVERAGE_POLICIES]
             for route in routes:
@@ -311,10 +328,14 @@ def build_adaptive_room_replays(study, root, travel, cap):
                 plans[arm] = packed
             benchmark = []
             for regime, report in summary[family].items():
-                stats = report["all"]
-                benchmark.append(dict(regime=regime, cases=stats["cases"],
-                                      whole=stats["whole_rmse"]["wins"], short=stats["short_rmse"]["wins"],
-                                      wholeDelta=stats["whole_rmse"]["delta"], shortDelta=stats["short_rmse"]["delta"]))
+                scopes = ("all", "full_resources") if family == "corridor" else ("all",)
+                for scope in scopes:
+                    stats = report[scope]
+                    if stats["cases"]:
+                        benchmark.append(dict(regime=regime, cases=stats["cases"],
+                                              whole=stats["whole_rmse"]["wins"], short=stats["short_rmse"]["wins"],
+                                              wholeDelta=stats["whole_rmse"]["delta"], shortDelta=stats["short_rmse"]["delta"],
+                                              **({"fullBudget": True} if scope == "full_resources" else {})))
             replays.append(dict(id=family, label=label, adaptive=True, zoneNames=zone_names, shortZones=short_zones.tolist(),
                                 layout=pack_layout(fine, np.empty(0, dtype=int)), travel=travel, cap=cap, plans=plans,
                                 truth=np.rint(truth * 1000).astype(int).tolist(), shortScores=short_scores,

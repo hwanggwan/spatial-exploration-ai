@@ -616,3 +616,20 @@ The unconstrained policy misses the two-reading requirement in 44 of 3,072 row r
 The adaptive demo shows one field per family at exactly 156 steps and 24 readings for both routes. It selects examples with weak cross-wall dependence and lower RMSE on both measures under the room requirement. In the row replay the unconstrained policy takes one reading in the left room. Whole-map RMSE goes from 0.7231 to 0.6769 in the row replay and from 0.6505 to 0.6033 in the loop replay. The benchmark tables summarize all fields.
 
 `PYTHONPATH=src .venv/bin/python tools/audit_residential_adaptive_coverage.py` runs the benchmark and saves per-field and per-route checkpoints in `outputs/sensing-world-residential-adaptive-coverage`. Restart the same command to resume an interrupted run.
+
+#### Adaptive rollout on corridor layouts
+
+Both adaptive policies use the 448 original mixed-range corridor fields with weak cross-wall dependence. The design includes two corridor layouts, four starts per layout, fourteen range profiles, and four draws per layout, start, and profile. The two-reading requirement covers the three physical rooms. The hallway can be sampled and contributes to whole-map RMSE. It also contributes to short-range RMSE when its true profile has short range. Both policies use the same 156-step and 24-reading caps and score the cells left unmeasured by both routes.
+
+| Paired runs | Whole-map wins | Short-range wins | Mean whole-map RMSE, unconstrained → minimum two | Mean short-range RMSE, unconstrained → minimum two |
+| --- | ---: | ---: | ---: | ---: |
+| All 448 | 243 (54.2%) | 222 (49.6%) | 0.6180 → 0.6076 | 0.6989 → 0.6910 |
+| Both caps reached, 330 pairs | 176 (53.3%) | 156 (47.3%) | 0.6123 → 0.6064 | 0.6938 → 0.6935 |
+
+The paired 95% intervals for changes over all fields are [−0.01626, −0.00464] for whole-map RMSE and [−0.01906, +0.00294] for short-range RMSE. The bootstrap resamples fields within each layout, start, and range profile. The two scores improve together in 179 of 448 pairs. On the 100 fixed reserve sites, mean changes are −0.01254 overall and −0.00813 in short-range areas.
+
+The unconstrained planner takes two readings in each physical room in 406 of 448 runs, and the constrained planner does so in all 448. Mean actual travel is 156.00 versus 155.89 steps, and mean readings are 23.72 versus 23.90. Empirical coverage of nominal 95% prediction intervals is 95.04% versus 95.00%. Mean route planning time is 0.45 versus 0.61 seconds in the eight-worker run.
+
+The corridor demo selects one field at exactly 156 steps and 24 readings for both routes. The unconstrained policy measures one of the rooms once. The requirement takes at least two readings in each room and lowers whole-map RMSE from 0.5579 to 0.4970 and short-range RMSE from 0.7766 to 0.6451 in the selected replay.
+
+`PYTHONPATH=src .venv/bin/python tools/audit_residential_adaptive_coverage.py --corridor` reuses the fixed-weight corridor benchmark archive and writes paired results to `outputs/sensing-world-residential-adaptive-corridor-coverage`.

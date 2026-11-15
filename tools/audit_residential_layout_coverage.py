@@ -103,11 +103,14 @@ def evaluate(case, model, draws):
     return rows, [route for pair in routes.values() for route in pair]
 
 
-def paired_intervals(rows, delta):
-    """Resample fields within layout and range profile, keeping their starts together."""
+def paired_intervals(rows, delta, shared_starts):
+    """Resample within layout and profile, accounting for whether starts share a field."""
     strata = defaultdict(lambda: defaultdict(list))
     for row, change in zip(rows, delta):
-        strata[row["variant"], row["profile"]][row["draw"]].append(change)
+        stratum = (row["variant"], row["profile"])
+        if not shared_starts:
+            stratum += (row["start"],)
+        strata[stratum][row["draw"]].append(change)
     rng = np.random.default_rng(SEED + 1)
     samples = np.zeros((3000, 2))
     for fields in strata.values():
@@ -118,8 +121,9 @@ def paired_intervals(rows, delta):
     return np.quantile(samples / len(rows), [.025, .975], axis=0).T.tolist()
 
 
-def summarize(rows, *, intervals=False):
-    result = dict(cases=len(rows), distinct_fields=len({(row["variant"], row["profile"], row["draw"]) for row in rows}))
+def summarize(rows, *, intervals=False, shared_starts=True):
+    keys = ("variant", "profile", "draw") if shared_starts else ("variant", "profile", "draw", "start")
+    result = dict(cases=len(rows), distinct_fields=len({tuple(row[k] for k in keys) for row in rows}))
     if not rows:
         return result
     for metric in METRICS:
@@ -130,7 +134,7 @@ def summarize(rows, *, intervals=False):
                               ties=int(np.count_nonzero(np.abs(delta) <= TIE)),
                               losses=int(np.count_nonzero(delta > TIE)))
         if intervals:
-            delta_ci, win_ci = paired_intervals(rows, delta)
+            delta_ci, win_ci = paired_intervals(rows, delta, shared_starts)
             result[metric].update(delta_ci95=delta_ci, win_fraction_ci95=win_ci)
     result["coverage_95"] = {arm: float(np.mean([row[f"{arm}_coverage_95"] for row in rows])) for arm in ARMS}
     return result

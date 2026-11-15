@@ -67,8 +67,9 @@ function showCoverageResults(){
   const {fields,scores,evaluationCells}=refinedScene;
   if(refinedScene.adaptive){
     const fmt=(wins,cases,delta)=>`${(100*wins/cases).toFixed(1)}% <small>Δ ${delta.toFixed(4)}</small>`;
-    const rows=refinedScene.benchmark.map(({regime,cases,whole,short,wholeDelta,shortDelta})=>`<tr>
-      <th scope="row">${regime==="weak" ? "Weak" : "Strong"} <small>${cases.toLocaleString("en-US")} pairs</small></th>
+    const rows=refinedScene.benchmark.map(({regime,cases,whole,short,wholeDelta,shortDelta,fullBudget})=>`<tr>
+      <th scope="row">${fullBudget ? "Weak · both caps reached" : regime==="weak" ? "Weak" : "Strong"}
+        <small>${cases.toLocaleString("en-US")} pairs</small></th>
       <td>${fmt(whole,cases,wholeDelta)}</td><td>${fmt(short,cases,shortDelta)}</td></tr>`).join("");
     byId("refined-result-title").textContent="Adaptive rollout benchmark";
     byId("refined-results").innerHTML=`<thead><tr><th scope="col">Across walls</th><th scope="col">Whole map</th>
@@ -139,7 +140,8 @@ function loadRefined(){
   byId("refined-right-label").textContent=coverage ? "Minimum two only" : "Rollout only";
   const studyPath="../docs/residential-floor-plan-study.md";
   byId("refined-report").href=coverage
-    ? (refinedScene.adaptive ? `${studyPath}#updating-the-planning-covariance-at-each-reading`
+    ? (refinedScene.adaptive ? `${studyPath}#${refinedScene.id==="corridor"
+      ? "adaptive-rollout-on-corridor-layouts" : "updating-the-planning-covariance-at-each-reading"}`
       : refinedScene.scores ? `${studyPath}#increasing-the-walking-budget-with-a-fixed-reading-cap`
                             : `${studyPath}#additional-floor-plans-in-the-replay`)
     : `${studyPath}#remaining-budget-rollout-on-the-refined-grid`;
@@ -227,7 +229,7 @@ byId("refined-selects").classList.toggle("has-study-selector",Boolean(refinedDat
 refinedStudy.value=refinedData?.roomCoverage && location.hash!=="#greedy-rollout" ? "coverage" : "greedy";
 const floorPlans=defaultCoverage?.adaptive ? [...coverageScenes.slice(1),coverageScenes[0]] : coverageScenes;
 coverageLayout.replaceChildren(...floorPlans.map(scene=>new Option(
-  scene.id==="corridor" && defaultCoverage?.adaptive ? "Corridor · fixed range weights" : scene.label, scene.id)));
+  scene.scores && defaultCoverage?.adaptive ? "Corridor · fixed range weights" : scene.label, scene.id)));
 const prefix="#room-coverage-";
 const requestedLayout=location.hash.startsWith(prefix) ? location.hash.slice(prefix.length) : "";
 if(defaultCoverage) coverageLayout.value=coverageScenes.find(scene=>scene.id===requestedLayout)?.id ?? defaultCoverage.id;

@@ -8,20 +8,23 @@
 
 Both planners update the spatial covariance from their sensor readings before choosing where to measure next. One planner also reserves enough budget to measure at least two distinct sites in each room. In the opening replay, both start at the same point, walk **156 steps**, and take **24 readings**. Drag the timeline to see how their routes, predictions, and uncertainty evolve alongside the true field. [Standalone HTML](demo/index.html)
 
-The two adaptive replays show selected fields where the room requirement improves both error measures. The floor-plan selector also includes the earlier corridor replay, which uses fixed range weights for planning. [Three rooms in a row](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row) · [Four-room loop](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-loop) · [Corridor](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-corridor)
+The adaptive replays show selected fields where the room requirement improves both error measures. The floor-plan selector covers three layouts and includes the earlier fixed-weight corridor replay. [Three rooms in a row](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row) · [Four-room loop](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-loop) · [Corridor](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-corridor)
 
 ## What we found
 
-**Requiring two readings per room slightly lowers mean map error in both layouts.** We compared both adaptive planners over **10,240 paired field and start combinations**, with shared caps of 156 steps and 24 readings. Each pair is scored on the same cells that neither route measured. The table reports the share of pairs where the requirement lowers RMSE and the mean change in RMSE.
+**Requiring two readings per room slightly lowers mean whole-map error in all three layouts.** We compared both adaptive planners over **10,688 paired field and start combinations**, with shared caps of 156 steps and 24 readings. Each pair is scored on the same cells that neither route measured. The table reports the share of pairs where the requirement lowers RMSE and the mean change in RMSE.
 
 | Floor plan | Dependence across walls | Whole-map win rate | Short-range win rate | Mean RMSE change, whole / short |
 | --- | --- | ---: | ---: | ---: |
 | Three rooms in a row | Weak | 53.7% | 54.0% | −0.0089 / −0.0128 |
 | Four-room loop | Weak | 34.7% | 33.6% | −0.0045 / −0.0040 |
+| Three rooms off a corridor | Weak | 54.2% | 49.6% | −0.0104 / −0.0079 |
 | Three rooms in a row | Strong | 54.7% | 53.1% | −0.0088 / −0.0082 |
 | Four-room loop | Strong | 34.9% | 33.6% | −0.0046 / −0.0050 |
 
-In the loop, the policies measure identical sites in about 37% of pairs and obtain the same RMSE. Among weak-wall pairs that measure different sites, the loop win rates are 54.8% and 53.0%. In the row layout, requiring two readings removes the 44 coverage misses seen in 3,072 unconstrained runs. Both layouts also show lower mean errors among route pairs that use all 156 steps and all 24 readings. [Protocol and paired results](docs/residential-floor-plan-study.md#updating-the-planning-covariance-at-each-reading)
+In the loop, the policies measure identical sites in about 37% of pairs and obtain the same RMSE. Among weak-wall pairs that measure different sites, the loop win rates are 54.8% and 53.0%. In the row layout, requiring two readings removes the 44 coverage misses seen in 3,072 unconstrained runs. [Row and loop results](docs/residential-floor-plan-study.md#updating-the-planning-covariance-at-each-reading)
+
+The corridor requirement removes 42 coverage misses across 448 runs. Among the 330 pairs that use all 156 steps and all 24 readings, mean whole-map RMSE drops by 0.0059 and short-range RMSE stays nearly unchanged. [Corridor results](docs/residential-floor-plan-study.md#adaptive-rollout-on-corridor-layouts)
 
 ### Earlier benchmarks
 
