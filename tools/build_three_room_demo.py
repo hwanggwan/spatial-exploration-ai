@@ -1,4 +1,4 @@
-"""Build an offline HTML replay from the verified three-room benchmark."""
+"""Build the standalone HTML replay from the verified benchmark archives."""
 
 import argparse
 import csv
@@ -16,6 +16,8 @@ from spatial_exploration.three_room_study import PRIMARY, design_for
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN = "__BENCHMARK_REPLAY_DATA__"
 WORLD_TOKEN = "__WORLD_RENDERER__"
+REFINED_TOKEN = "__REFINED_RENDERER__"
+REFINED_DATA_TOKEN = "__REFINED_REPLAY_DATA__"
 
 
 def build_data(source, learned_replay=None, rollout_replay=None):
@@ -145,19 +147,30 @@ def main():
     parser.add_argument("--source", type=Path, default=ROOT / "outputs/three-room-study")
     parser.add_argument("--learned-replay", type=Path, default=ROOT / "outputs/sensing-world-study/replay.json")
     parser.add_argument("--rollout-replay", type=Path, default=ROOT / "outputs/sensing-world-rollout/replay.json")
+    parser.add_argument("--refined-study", type=Path, default=ROOT / "outputs/sensing-world-residential-refined-rollout")
     parser.add_argument("--output", type=Path, default=ROOT / "demo/index.html")
     args = parser.parse_args()
     template = (ROOT / "demo/index.template.html").read_text(encoding="utf8")
-    if template.count(TOKEN) != 1:
-        raise ValueError("Expected a single replay data placeholder")
-    if template.count(WORLD_TOKEN) != 1:
-        raise ValueError("Expected a single world renderer placeholder")
-    renderer = (ROOT / "demo/world.js").read_text(encoding="utf8")
     data = build_data(args.source, args.learned_replay, args.rollout_replay)
+    refined = None
+    if args.refined_study.is_dir():
+        from build_residential_replay import build_residential_replay
+
+        refined = build_residential_replay(args.refined_study, ROOT)
+    replacements = {
+        TOKEN: json.dumps(data, separators=(",", ":")),
+        REFINED_DATA_TOKEN: json.dumps(refined, separators=(",", ":")),
+        WORLD_TOKEN: (ROOT / "demo/world.js").read_text(encoding="utf8"),
+        REFINED_TOKEN: (ROOT / "demo/refined.js").read_text(encoding="utf8"),
+    }
+    for placeholder, content in replacements.items():
+        if template.count(placeholder) != 1:
+            raise ValueError(f"Expected one placeholder for {placeholder}")
+        template = template.replace(placeholder, content)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    html = template.replace(TOKEN, json.dumps(data, separators=(",", ":"))).replace(WORLD_TOKEN, renderer)
-    args.output.write_text(html, encoding="utf8")
-    print(f"Exported {len(data['cases'])} paired replays to {args.output}")
+    args.output.write_text(template, encoding="utf8")
+    n_refined = len(refined["cases"]) if refined else 0
+    print(f"Exported {n_refined} corridor and {len(data['cases'])} three-room replays to {args.output}")
 
 
 if __name__ == "__main__":

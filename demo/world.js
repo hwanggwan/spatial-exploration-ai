@@ -109,7 +109,8 @@ function paintDuel(cursors) {
   });
 }
 
-function drawWorld(canvas, layout, plan, n, distance, target, floor, highlight) {
+function drawWorld(canvas, layout, plan, n, distance, target, floor, highlight,
+                   floorColor = value => color(value, layer==="std")) {
   const {clientWidth:width, clientHeight:height} = canvas;
   const ctx = canvas.getContext("2d");
   if (!width || !height || !ctx) return;
@@ -130,6 +131,9 @@ function drawWorld(canvas, layout, plan, n, distance, target, floor, highlight) 
   const depth = (x,z) => (x-6)*sin+(z-6)*cos;
   const project = ([x,y,z]) => [width*.5+rotatedX(x,z)*scale,
     height*.53+(depth(x,z)*high-y*depthScale)*scale];
+  const size=layout.size ?? 12, unit=12/size;
+  const gridCell=site=>[(site%size)*unit,(size-1-Math.floor(site/size))*unit];
+  const gridCenter=site=>gridCell(site).map(value=>value+unit/2);
 
   function trace(vertices) {
     ctx.beginPath();
@@ -170,48 +174,63 @@ function drawWorld(canvas, layout, plan, n, distance, target, floor, highlight) 
   // A raised slab, the posterior raster and measurement marks share one geometry.
   box(-.15,12.15,-.15,12.15,-.42,0,["#243e42","#37535a","#c2d1c8"]);
   for (let site=0;site<floor.length;site++) {
-    const [x,z]=cell(site);
-    const fill=color(floor[site]/1000,layer==="std");
-    poly(rect(x,x+1,z,z+1,0),fill,fill,1.5);
+    const [x,z]=gridCell(site);
+    const fill=floorColor(floor[site]/1000);
+    poly(rect(x,x+unit,z,z+unit,0),fill,fill,1);
   }
-  for(let i=0;i<=12;i++) {
+  for(let j=0;j<=size;j++) {
+    const i=j*unit;
     line([[i,.012,0],[i,.012,12]],"#1a343027",.75);
     line([[0,.012,i],[12,.012,i]],"#1a343027",.75);
   }
-  const path = plan.walk.slice(0,Math.floor(distance)+1).map(center);
-  const last=path[path.length-1], next=center(plan.walk[Math.min(Math.ceil(distance),plan.walk.length-1)]);
-  const fraction=distance-Math.floor(distance);
-  const robot=last.map((v,i)=>v+(next[i]-v)*fraction);
-  const positions=[...path,robot].map(([x,z])=>[x,.035,z]);
-  line(positions,"#f8fff2dd",Math.max(2,scale*.123));
-  line(positions,highlight?.path ?? "#205c50",Math.max(1.4,scale*.067));
-  plan.sites.slice(0,n).forEach((site,i)=>{
-    const [x,z]=center(site);
-    if (i===0) poly(rect(x-.15,x+.15,z-.15,z+.15,.06),"#ffc751","#203732");
-    else marker(x,z,.06,highlight ? .19 : .13,highlight?.fill(site) ?? "#fafff5",highlight?.path ?? "#275750");
-  });
-  if (target !== undefined) {
-    const [x,z]=center(target);
-    ctx.setLineDash([4,3]);
-    marker(x,z,.065,.32,"#f9f4c440","#234841");
-    ctx.setLineDash([]);
-  }
-  const [rx,rz] = robot;
-  if (distance===plan.endpoints[n-1]-1) {
-    marker(rx,rz,.066,.44,"#e1f49c64","#e8f8b6");
+  let robot;
+  if(plan){
+    const path=plan.walk.slice(0,Math.floor(distance)+1).map(gridCenter);
+    const last=path[path.length-1], next=gridCenter(plan.walk[Math.min(Math.ceil(distance),plan.walk.length-1)]);
+    const fraction=distance-Math.floor(distance);
+    robot=last.map((v,i)=>v+(next[i]-v)*fraction);
+    const positions=[...path,robot].map(([x,z])=>[x,.035,z]);
+    line(positions,"#f8fff2dd",Math.max(2,scale*.123));
+    line(positions,highlight?.path ?? "#205c50",Math.max(1.4,scale*.067));
+    const stopScale=Math.sqrt(unit);
+    plan.sites.slice(0,n).forEach((site,i)=>{
+      const [x,z]=gridCenter(site);
+      if (i===0) poly(rect(x-.15,x+.15,z-.15,z+.15,.06),"#ffc751","#203732");
+      else marker(x,z,.06,(highlight ? .19 : .13)*stopScale,highlight?.fill(site) ?? "#fafff5",highlight?.path ?? "#275750");
+    });
+    if (target !== undefined) {
+      const [x,z]=gridCenter(target);
+      ctx.setLineDash([4,3]);
+      marker(x,z,.065,.32*stopScale,"#f9f4c440","#234841");
+      ctx.setLineDash([]);
+    }
+    if (distance===plan.endpoints[n-1]-1) {
+      marker(robot[0],robot[1],.066,.44*stopScale,"#e1f49c64","#e8f8b6");
+    }
+  } else {
+    for(const site of layout.held){
+      const [x,z]=gridCenter(site);
+      marker(x,z,.03,.045,"#31464a","#f5f6ec");
+    }
   }
 
   const objects=[];
   const add=(x,z,draw)=>objects.push({depth:depth(x,z),draw});
-  // Door openings are the same unit intervals used by the benchmark.
-  layout.doors.forEach((door,i)=>{
+  const wallColors=["#5c7473","#768e88","#c3d4c7"];
+  if(layout.walls){
+    for(const segment of layout.walls){
+      const [x0,z0,x1,z1]=segment.map(value=>value*unit);
+      const dx=x0===x1 ? .072 : 0, dz=z0===z1 ? .072 : 0;
+      add((x0+x1)/2,(z0+z1)/2,()=>box(x0-dx,x1+dx,z0-dz,z1+dz,.006,.78,wallColors));
+    }
+  } else layout.doors.forEach((door,i)=>{
     const x=i?9:3, opening=11-door;
     for(let z=0;z<12;z++) {
       if (z===opening) {
         poly(rect(x-.14,x+.14,z+.045,z+.955,.038),"#f9f4c482");
         continue;
       }
-      add(x,z+.5,()=>box(x-.095,x+.095,z,z+1,.006,1.17,["#5c7473","#768e88","#c3d4c7"]));
+      add(x,z+.5,()=>box(x-.095,x+.095,z,z+1,.006,1.17,wallColors));
     }
   });
   // Low borders keep the floor visible when the camera orbits.
@@ -221,6 +240,8 @@ function drawWorld(canvas, layout, plan, n, distance, target, floor, highlight) 
     add(0,i+.5,()=>box(-.11,0,i,i+1,0,.27,["#53716f","#698681","#bad2c7"]));
     add(12,i+.5,()=>box(12,12.11,i,i+1,0,.27,["#53716f","#698681","#bad2c7"]));
   }
+  if(robot){
+  const [rx,rz]=robot;
   add(rx,rz,()=>{
     marker(rx,rz,.07,.35,"#182e37a0");
     box(rx-.275,rx+.275,rz-.23,rz+.23,.09,.20,["#12252d","#192e35","#385054"]);
@@ -228,11 +249,13 @@ function drawWorld(canvas, layout, plan, n, distance, target, floor, highlight) 
     box(rx-.106,rx+.106,rz-.11,rz+.11,.44,.55,["#658e81","#a0bca2","#fae88a"]);
     marker(rx,rz,.557,.062,"#285e50");
   });
+  }
   objects.sort((a,b)=>a.depth-b.depth);
   objects.forEach(object=>object.draw());
 }
 
 function redrawWorld() {
+  if(displayMode==="refined"){paintRefined();return;}
   if(!replay) return;
   if(displayMode==="duel") paintDuel(duelCursors);
   if(displayMode==="world") paintWorld(liveCursor);
@@ -244,7 +267,7 @@ function orbit(delta) {
 }
 
 const observer = new ResizeObserver(redrawWorld);
-for (const canvas of [worldCanvas, ...duelViews.map(view=>view.canvas)]) {
+function registerWorldCanvas(canvas) {
   observer.observe(canvas);
   canvas.addEventListener("pointerdown",event=>{
     if (event.button!==0 || drag) return;
@@ -260,6 +283,7 @@ for (const canvas of [worldCanvas, ...duelViews.map(view=>view.canvas)]) {
     if(drag?.canvas===canvas && drag.id===event.pointerId) drag=null;
   });
 }
+[worldCanvas, ...duelViews.map(view=>view.canvas)].forEach(registerWorldCanvas);
 byId("orbit-left").addEventListener("click",()=>orbit(-.27));
 byId("orbit-right").addEventListener("click",()=>orbit(.27));
 byId("orbit-reset").addEventListener("click",()=>orbit(defaultYaw-yaw));

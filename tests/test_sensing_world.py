@@ -64,6 +64,19 @@ class SensingWorldTests(unittest.TestCase):
         self.assertEqual(learned, gp.first)
         self.assertIsNone(choose_rollout_site(belief, hops, allowed, [2], 0, 2, innovations=innovations))
 
+    def test_rollout_coverage_breaks_equal_variance_ties_with_walking_distance(self):
+        positions = np.arange(5)
+        hops = np.abs(positions[:, None] - positions)
+        belief = Belief.prior(np.eye(5)[None], .12).observe(0, 0.)
+        allowed = np.ones(5, dtype=bool)
+        innovations = rollout_samples(1)
+        self.assertEqual(choose_rollout_site(belief, hops, allowed, [0], 4, 1, innovations=innovations), 1)
+        self.assertEqual(choose_rollout_site(belief, hops, allowed, [0], 4, 1, innovations=innovations,
+                                             coverage_weight=.025), 3)
+        allowed[3] = False
+        self.assertEqual(choose_rollout_site(belief, hops, allowed, [0], 2, 1, innovations=innovations,
+                                             coverage_weight=.025), 2)
+
     def test_mixture_terminal_score_agrees_with_integrated_posterior_variance(self):
         covariance = np.array([[[1., .6], [.6, 1.]], [[1., .1], [.1, 1.]]])
         belief = Belief.prior(covariance, .12)

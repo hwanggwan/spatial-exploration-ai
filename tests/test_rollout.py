@@ -120,6 +120,16 @@ class RolloutTests(unittest.TestCase):
             with self.subTest(changes=list(changes)), self.assertRaises(ValueError):
                 self.plan(**changes)
 
+    def test_first_move_filter_preserves_the_base_and_full_greedy_suffix(self):
+        candidates = self.plan(first_move_candidates=[15, 15, 4, 0])
+        baseline = self.plan(first_move_candidates=[])
+        self.assertEqual(baseline.route, baseline.greedy_route)
+        self.assertEqual(baseline.candidates_evaluated, 1)
+        self.assertEqual(candidates.greedy_route, baseline.greedy_route)
+        self.assertEqual(candidates.candidates_evaluated, 2)
+        self.assertLessEqual(candidates.final_mean_variance, baseline.final_mean_variance + 1e-12)
+        self.assertGreater(len(baseline.route), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

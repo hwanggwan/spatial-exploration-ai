@@ -1,12 +1,12 @@
 # Field Routes · Spatial Exploration AI
 
-**Where should a robot take its next reading?** Field Routes simulates a robot mapping an unknown sensor field inside a known floor plan. It can walk through doors and take at most 16 noisy readings. The goal is to reconstruct the field as accurately as possible before the travel or sensing budget runs out.
+**Where should a robot take its next reading?** Field Routes simulates a robot mapping an unknown sensor field inside a known floor plan. It can walk through doors and collect noisy readings along the way. The goal is to reconstruct the field as accurately as possible within the travel and sensing limits.
 
 **[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
 
-[![Animated 3D comparison of world model rollout and GP rollout. Open the interactive demo.](demo/preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/)
+[![Animated 3D comparison of greedy and rollout at the same walking distance. Open the interactive demo.](demo/preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/)
 
-The demo opens with **3D rollout comparison**. Press **Play** or scrub the shared timeline to compare world model rollout and GP rollout at the same start with a 26-step walking cap and 16-reading cap. White stops have been measured by both planners. Purple and teal mark stops measured by only one planner so far. Drag either scene to rotate both. The **3D world** and **Compare maps** views let you explore the original replay and show the true field. For offline use, download [the standalone HTML file](demo/index.html) and open it in a browser.
+The demo opens with **3D corridor comparison**. Replay greedy and rollout under the same 52-step and 24-reading caps or at the same actual walking distance. The timeline advances both robots by distance and shows their reconstructed maps beside the true sensor field. The original world-model and GP comparison remains available in **World model vs. GP**. [Corridor benchmark](docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid) · [Standalone HTML for offline use](demo/index.html)
 
 ## What we found
 
@@ -57,4 +57,4 @@ python tools/build_three_room_demo.py
 python -m unittest discover -s tests -v
 ```
 
-The [three-room report](docs/three-room-study.md) includes the full budget and field comparisons, room-level error, and route verification. The [experiment index](docs/experiments.md) covers earlier GP and DeepKriging comparisons, learned planning, and reproduction notes.
+The [three-room report](docs/three-room-study.md) includes the full budget and field comparisons, room-level error, and route verification. The [demo notes](demo/README.md) list the additional commands for the 23 × 23 corridor scenes. The [experiment index](docs/experiments.md) covers earlier GP and DeepKriging comparisons, learned planning, and reproduction notes.

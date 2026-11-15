@@ -169,15 +169,23 @@ def expected_terminal_variance(belief, route, innovations):
     return float(analytic + weights @ between.reshape(len(weights), len(z)).mean(axis=1))
 
 
-def choose_rollout_site(belief, hops, allowed, visited, remaining, remaining_readings, *, innovations):
-    """Roll out the moment-matched GP, reranking suffixes under the mixture."""
+def choose_rollout_site(belief, hops, allowed, visited, remaining, remaining_readings, *,
+                        innovations, coverage_weight=0.):
+    """Roll out the moment-matched GP, optionally penalizing gaps in coverage."""
     current = visited[-1]
     measured = np.zeros(len(allowed), dtype=bool)
     measured[visited] = True
     if not remaining_readings or not np.any(allowed & ~measured & (hops[current] <= remaining)):
         return None
     _, covariance = belief.moments()
+    nearest = hops[:, visited].min(axis=1) if coverage_weight else None
+
+    def terminal_score(route):
+        score = expected_terminal_variance(belief, route, innovations)
+        if nearest is not None:
+            score += coverage_weight * np.minimum(nearest, hops[:, route].min(axis=1)).mean()
+        return score
+
     plan = plan_rollout(covariance, hops, current, measured, allowed, remaining, belief.noise_variance,
-        remaining_observations=remaining_readings,
-        terminal_variance=lambda route: expected_terminal_variance(belief, route, innovations))
+        remaining_observations=remaining_readings, terminal_variance=terminal_score)
     return plan.first

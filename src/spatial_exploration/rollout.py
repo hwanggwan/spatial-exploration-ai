@@ -20,8 +20,9 @@ class RolloutPlan:
 
 
 def plan_rollout(covariance, distances, current, visited, allowed,
-                 remaining_budget, noise_variance, *, remaining_observations=None, terminal_variance=None):
-    """Try every feasible first move, then run greedy to a terminal state.
+                 remaining_budget, noise_variance, *, remaining_observations=None,
+                 terminal_variance=None, first_move_candidates=None):
+    """Try feasible first moves, then run greedy to a terminal state.
 
     Minimize the resulting *final* whole-grid mean posterior variance, stopping
     each hypothetical route at either the travel or optional observation cap. Execute
@@ -31,9 +32,10 @@ def plan_rollout(covariance, distances, current, visited, allowed,
     on objective ties within 1e-12; this avoids gratuitous numerical changes.
 
     Covariance is already conditioned on all visited sites. No future measured
-    values or latent field are used. No candidate truncation or tail cutoff is
-    applied. With an exact fixed covariance model, full feasible actions and
-    exact arithmetic, repeated rollout cannot do worse than the base policy
+    values or latent field are used. The optional first-move list limits only
+    the first-move search. The baseline first move and full greedy suffix
+    remain available. With a fixed covariance model and exact arithmetic,
+    repeated rollout cannot do worse than the base policy
     under the default Gaussian terminal score. A custom terminal variance can
     rescore each greedy completion, excluding the already measured start.
     This is a policy-improvement property, not a global optimality claim.
@@ -73,6 +75,8 @@ def plan_rollout(covariance, distances, current, visited, allowed,
 
     base_first = plan_measurements(covariance, distances, current, visited, allowed,
                                    remaining_budget, noise_variance, depth=1).first
+    if first_move_candidates is not None:
+        candidates = candidates[np.isin(candidates, first_move_candidates)]
     # Start with the exact base-policy completion as the incumbent. With no
     # material improvement, preserve its first action and deterministic ties.
     ordered = [base_first] + [int(index) for index in candidates if index != base_first]
@@ -109,7 +113,7 @@ def plan_rollout(covariance, distances, current, visited, allowed,
         if best is None or variance < best[0] - 1e-12:
             best = (variance, tuple(route), travel)
     return RolloutPlan(best[1][1], best[1], best[0], best[2], greedy_route,
-                       greedy_variance, len(candidates), simulations)
+                       greedy_variance, len(ordered), simulations)
 
 
 def rollout_for_environment(env):

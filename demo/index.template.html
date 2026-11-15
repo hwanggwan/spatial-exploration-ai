@@ -61,6 +61,23 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 .duel-key .world-only{background:#ad7ed7}.duel-key .gp-only{background:#44ab9b}
 .duel-key .both{background:white}
 @media(max-width:760px){.duel-grid{grid-template-columns:1fr}.duel-card .viewport{height:clamp(250px,57vw,390px)}}
+.refined-controls .selects{grid-template-columns:repeat(3,minmax(0,1fr))}
+.refined-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.refined-grid .duel-card .viewport{height:clamp(264px,27vw,350px)}
+.refined-grid .rooms{grid-template-columns:repeat(2,minmax(0,1fr))}
+.refined-truth .desc{padding:9px 12px;min-height:0}
+.duel-key .greedy-only{background:#ef8b64}.duel-key .refined-only{background:#6cccbb}
+.benchmark{margin:8px 0 20px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px}
+.benchmark h2{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}
+.benchmark p{color:var(--muted);font-size:13px}
+.benchmark table{margin:10px 0;border-collapse:collapse;width:100%;font-size:13px}
+.benchmark th,.benchmark td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--line)}
+.benchmark th:first-child,.benchmark td:first-child{text-align:left}
+.benchmark tbody tr[aria-current=true]{background:#edf6ed}
+.benchmark td{font-variant-numeric:tabular-nums}
+.benchmark a{color:var(--teal)}
+@media(max-width:900px){.refined-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.refined-truth{grid-column:1/-1}.refined-grid .refined-truth .viewport{height:270px}}
+@media(max-width:630px){.refined-controls .selects{grid-template-columns:repeat(2,minmax(0,1fr))}.refined-controls .selects label:last-child{grid-column:1/-1}.refined-grid{grid-template-columns:1fr}.refined-grid .duel-card .viewport{height:280px}.benchmark th,.benchmark td{padding:6px 4px}}
 </style>
 </head>
 <body>
@@ -68,9 +85,23 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 <main class="wrap">
 <section class="hero" aria-labelledby="title">
 <div><p class="eyebrow">Interactive benchmark replay</p><h1 id="title">Mapping an unknown field</h1><p>Compare where two robot planners stop to measure the same field and how each reading updates their maps.</p></div>
-<div class="limits" aria-label="Resource caps"><span>16 readings max</span><span id="travel-cap"></span></div>
+<div class="limits" aria-label="Resource caps"><span id="reading-cap">24 readings max</span><span id="travel-cap">52 walking steps max</span></div>
 </section>
-<section class="control" aria-label="Replay controls">
+<section class="control refined-controls" id="refined-controls" aria-label="Corridor replay controls" hidden>
+<div class="selects">
+<label><span class="key">Floor plan</span><select id="refined-layout"><option value="1">Corridor B</option><option value="0">Corridor A</option></select></label>
+<label><span class="key">Sensor field</span><select id="refined-field"><option value="short">Short range</option><option value="mixed">Mixed by area</option><option value="long">Long range</option></select></label>
+<label><span class="key">Compare at</span><select id="refined-budget"><option value="caps">Shared budget caps</option><option value="matched">Same walking distance</option></select></label>
+</div>
+<div class="timeline">
+<button type="button" class="play" id="refined-play">▶ Play</button>
+<button type="button" id="refined-reset">Reset</button>
+<button type="button" id="refined-end">Jump to result</button>
+<label style="flex:1"><span class="sr">Walking steps</span><input id="refined-step" type="range" min="0" max="52" value="0" style="width:100%"></label>
+<output class="step" id="refined-step-label" for="refined-step"></output>
+</div>
+</section>
+<section class="control" id="legacy-controls" aria-label="Replay controls" hidden>
 <div class="selects">
 <label><span class="key">Floor plan</span><select id="layout"><option value="0">A · low / high</option><option value="1">B · high / low</option></select></label>
 <label><span class="key">Start</span><select id="start"><option value="13">A · lower left</option><option value="49">B · lower middle</option><option value="85">C · upper middle</option><option value="121">D · upper left</option></select></label>
@@ -89,7 +120,8 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 <div class="viewbar">
 <div class="viewmodo">
 <div class="layers" role="group" aria-label="Display mode">
-<button type="button" data-view="duel" aria-pressed="true">3D rollout comparison</button>
+<button type="button" data-view="refined" aria-pressed="true" hidden>3D corridor comparison</button>
+<button type="button" data-view="duel" aria-pressed="false">World model vs. GP</button>
 <button type="button" data-view="world" aria-pressed="false">3D world</button>
 <button type="button" data-view="compare" aria-pressed="false">Compare maps</button>
 </div>
@@ -103,7 +135,31 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 <div class="legend" id="std-scale" aria-label="Uncertainty color scale" hidden><span>0</span><span class="ramp uncertainty"></span><span id="std-max"></span><span>Model std. dev.</span></div>
 </div>
 </div>
-<section id="duel" aria-label="Side-by-side 3D rollout comparison">
+<section id="refined" aria-label="Greedy and rollout corridor comparison" hidden>
+<div class="duel-top">
+<p id="refined-explanation"></p>
+<div class="camera duel-camera" role="group" aria-label="Shared corridor camera">
+<button type="button" data-orbit="-0.27" aria-label="Rotate corridor views left">↶</button>
+<button type="button" data-orbit="0.27" aria-label="Rotate corridor views right">↷</button>
+<button type="button" data-orbit="reset" aria-label="Reset corridor cameras">⌂</button>
+</div>
+</div>
+<div class="duel-grid refined-grid" id="refined-cards"></div>
+<div class="mapkey duel-key" aria-label="Corridor route symbols">
+<span><i class="symbol"></i>Shared start</span>
+<span><i class="symbol stop both"></i>Measured by both</span>
+<span><i class="symbol stop greedy-only"></i>Greedy only</span>
+<span><i class="symbol stop refined-only"></i>Rollout only</span>
+</div>
+<section class="benchmark" aria-labelledby="refined-result-title">
+<h2 id="refined-result-title">Benchmark RMSE</h2>
+<p id="refined-result-note"></p>
+<table id="refined-results"></table>
+<p id="refined-result-detail"></p>
+<p><a href="../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid">Protocol and full results</a></p>
+</section>
+</section>
+<section id="duel" aria-label="Side-by-side 3D rollout comparison" hidden>
 <div class="duel-top">
 <p>Drag either view to rotate both. The timeline advances both routes by reading number.</p>
 <div class="camera duel-camera" role="group" aria-label="Shared camera">
@@ -114,7 +170,7 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 </div>
 <div class="duel-grid" id="duel-cards"></div>
 </section>
-<div id="duel-key" class="mapkey duel-key" aria-label="Rollout route symbols">
+<div id="duel-key" class="mapkey duel-key" aria-label="Rollout route symbols" hidden>
 <span><i class="symbol"></i>Shared start</span>
 <span><i class="symbol stop both"></i>Measured by both so far</span>
 <span><i class="symbol stop world-only"></i>World model only</span>
@@ -170,7 +226,7 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 <div class="plans" id="cards"></div>
 </div>
 <div class="mapkey" id="compare-key" aria-label="Map symbols" hidden><span><i class="symbol"></i>Start · first reading</span><span><i class="symbol stop"></i>Measurement stop</span><span><i class="symbol position"></i>Current location</span><span><i class="symbol test"></i>Held-out site</span><span><i class="symbol wall"></i>Wall</span><span><i class="symbol route"></i>Walking path</span></div>
-<div class="notes">
+<div class="notes" id="legacy-notes" hidden>
 <p><strong>Bayesian and learned sensing.</strong> Equal, priority and GP rollout share the wall-aware Bayesian ridge mapper. The learned world model fits spatial patterns from simulated sensor data and plans under several possible next readings. Both use the known floor plan. <a href="../docs/sensing-world-study.md">World-model comparison</a></p>
 <p><strong>How to read the replay.</strong> The timeline aligns reading counts. In 3D, the robot walks each archived path between readings. Finished routes stay on their last frame. Hold-out RMSE uses 28 never-sensed sites; uncertainty shows model standard deviation. <a href="../docs/three-room-study.md">Experiment notes</a></p>
 </div>
@@ -178,9 +234,11 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 <noscript><p>Enable JavaScript to play the offline replay.</p></noscript>
 </main>
 <script id="replay-data" type="application/json">__BENCHMARK_REPLAY_DATA__</script>
+<script id="refined-data" type="application/json">__REFINED_REPLAY_DATA__</script>
 <script>
 "use strict";
 const data = JSON.parse(document.querySelector("#replay-data").textContent);
+const refinedData = JSON.parse(document.querySelector("#refined-data").textContent);
 const methods = [
   {key:"equal", label:"Equal allocation", desc:"Split readings evenly across selected rooms.", color:"#346e8b"},
   {key:"priority", label:"Priority allocation", desc:"Favor uncertain rooms that cost less to reach.", color:"#a25432"},
@@ -196,7 +254,7 @@ const cards = byId("cards");
 const controls = ["layout","start","budget","regime"].map(byId);
 const slider = byId("step");
 const play = byId("play");
-let frame=1, layer="mean", displayMode="duel", playback=null, pausedElapsed=0, replay, extent, ceiling;
+let frame=1, layer="mean", displayMode=refinedData ? "refined" : "duel", playback=null, pausedElapsed=0, replay, extent, ceiling;
 const worldMethod=byId("world-method");
 worldMethod.innerHTML=methods.map(m=>`<option value="${m.key}">${m.label}</option>`).join("");
 worldMethod.value="learned_world";
@@ -211,9 +269,9 @@ const circle = (site,r,attr) => {
   return `<circle cx="${x}" cy="${y}" r="${r}" ${attr}/>`;
 };
 const mix = (a,b,t) => "rgb("+a.map((v,i)=>Math.round(v+(b[i]-v)*t)).join(",")+")";
-const color = (v,uncertain) => {
-  if(uncertain) return mix([244,246,236],[55,60,118], Math.min(1,v/ceiling));
-  const t=Math.max(-1,Math.min(1,v/extent));
+const color = (v,uncertain,bound=uncertain ? ceiling : extent) => {
+  if(uncertain) return mix([244,246,236],[55,60,118], Math.min(1,v/bound));
+  const t=Math.max(-1,Math.min(1,v/bound));
   return mix([242,239,229],t<0?[39,100,138]:[175,73,57],Math.abs(t));
 };
 function miniMap(values, label, uncertain=false, method=null, plan=null, n=0) {
@@ -246,6 +304,7 @@ function miniMap(values, label, uncertain=false, method=null, plan=null, n=0) {
   </svg>`;
 }
 __WORLD_RENDERER__
+__REFINED_RENDERER__
 function paint() {
   slider.value=frame;
   slider.setAttribute("aria-valuetext",`Reading ${frame} of ${slider.max}`);
@@ -344,30 +403,39 @@ function loadCase(reading=1){
   byId("reference-map").innerHTML=reference;
   byId("world-reference").innerHTML=reference;
   byId("travel-cap").textContent=`${Math.round(data.caps[budget]*11)} walking steps max`;
+  byId("reading-cap").textContent=`${data.count} readings max`;
   changeFrame(reading);
 }
 controls.forEach(el=>el.addEventListener("change",()=>loadCase()));
 worldMethod.addEventListener("change",()=>{stop();futureIndex=null;paint();});
-document.querySelectorAll("[data-view]").forEach(btn=>btn.addEventListener("click",()=>{
+function showView(view){
   stop();
+  stopRefined();
   futureIndex=null;
   const budget=byId("budget");
   const oldBudget=budget.value;
-  if(displayMode!=="duel") savedBudget=oldBudget;
-  displayMode=btn.dataset.view;
+  if(displayMode==="world" || displayMode==="compare") savedBudget=oldBudget;
+  displayMode=view;
   budget.value=displayMode==="duel" ? "loose" : savedBudget;
   budget.disabled=displayMode==="duel";
-  document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",String(b===btn)));
+  document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.view===view)));
   for(const id of ["duel","world","compare"]){
     byId(id).hidden=id!==displayMode;
     byId(id+"-key").hidden=id!==displayMode;
   }
-  loadCase(budget.value===oldBudget ? frame : 1);
-}));
+  byId("refined").hidden=view!=="refined";
+  byId("refined-controls").hidden=view!=="refined";
+  byId("legacy-controls").hidden=view==="refined";
+  byId("legacy-notes").hidden=view==="refined";
+  if(view==="refined") loadRefined();
+  else loadCase(budget.value===oldBudget ? frame : 1);
+}
+document.querySelectorAll("[data-view]").forEach(btn=>btn.addEventListener("click",()=>showView(btn.dataset.view)));
 document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("click",()=>{
   layer=btn.dataset.layer;
   document.querySelectorAll("[data-layer]").forEach(b=>b.setAttribute("aria-pressed",String(b===btn)));
-  if (displayMode==="duel") paintDuel(duelCursors);
+  if (displayMode==="refined") paintRefined();
+  else if (displayMode==="duel") paintDuel(duelCursors);
   else if (displayMode==="world" && liveCursor!==undefined) paintWorld(liveCursor);
   else paint();
 }));
@@ -382,7 +450,8 @@ play.addEventListener("click",()=>{
   play.textContent="Ⅱ Pause";play.setAttribute("aria-label","Pause replay");
   queueFrame();
 });
-loadCase();
+document.querySelector("[data-view=refined]").hidden=!refinedData;
+showView(displayMode);
 </script>
 </body>
 </html>
