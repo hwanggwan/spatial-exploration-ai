@@ -1,6 +1,6 @@
 // Distance-synchronized replay of the refined corridor benchmark.
 const refinedMethods = [
-  {key:"fine_candidates", label:"Greedy", path:"#b9603b", stop:"#ef8b64"},
+  {key:"fine_candidates", label:"Greedy", path:"#663694", stop:"#d0a2f7"},
   {key:"fine_rollout", label:"Rollout", path:"#328b7c", stop:"#6cccbb"}
 ];
 const coverageMethods = [
