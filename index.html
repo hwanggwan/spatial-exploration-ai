@@ -279,17 +279,18 @@ const circle = (site,r,attr) => {
 };
 const mix = (a,b,t) => "rgb("+a.map((v,i)=>Math.round(v+(b[i]-v)*t)).join(",")+")";
 const fieldPalette = [
-  [20,54,112], [31,93,158], [55,144,190], [137,200,230],
-  [249,249,246],
-  [245,139,116], [227,75,62], [189,32,56], [132,15,49]
+  [-1,[20,54,112]], [-0.7,[31,93,158]], [-0.4,[55,144,190]], [-0.18,[137,200,230]],
+  [0,[249,249,246]],
+  [0.18,[245,139,116]], [0.4,[227,75,62]], [0.7,[189,32,56]], [1,[132,15,49]]
 ];
-byId("field-ramp").style.backgroundImage=`linear-gradient(90deg, ${fieldPalette.map(rgb=>"rgb("+rgb.join(",")+")").join(", ")})`;
+const fieldGradient = fieldPalette.map(([stop,rgb]) => `rgb(${rgb.join(",")}) ${(1+stop)*50}%`);
+byId("field-ramp").style.backgroundImage=`linear-gradient(90deg, ${fieldGradient.join(", ")})`;
 const color = (v,uncertain,bound=uncertain ? ceiling : extent) => {
   if(uncertain) return mix([244,246,236],[55,60,118], Math.min(1,v/bound));
-  const last=fieldPalette.length-1;
-  const position=last*Math.max(0,Math.min(1,(v/bound+1)/2));
-  const index=Math.min(Math.floor(position),last-1);
-  return mix(fieldPalette[index],fieldPalette[index+1],position-index);
+  const position=Math.max(-1,Math.min(1,v/bound));
+  const upper=Math.max(1,fieldPalette.findIndex(([stop])=>position<=stop));
+  const [lo,lowColor]=fieldPalette[upper-1], [hi,highColor]=fieldPalette[upper];
+  return mix(lowColor,highColor,(position-lo)/(hi-lo));
 };
 function miniMap(values, label, method=null, plan=null, n=0) {
   const layout=data.layouts[replay.layout];
