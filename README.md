@@ -2,29 +2,30 @@
 
 **Where should a robot take its next reading?** Field Routes simulates a robot mapping an unknown sensor field inside a known floor plan. It can walk through doors and collect noisy readings along the way. The goal is to reconstruct the field as accurately as possible within the travel and sensing limits.
 
-**[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
+**[Launch the interactive demo](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row)** · [Benchmark results](#what-we-found) · [Reproduce the demo](#reproduce-the-benchmark)
 
-[![Two robots mapping the same field with 156 walking steps and 24 sensor readings each. Open the interactive replay.](demo/room-coverage-preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage)
+[![Two adaptive rollouts mapping the same field with 156 walking steps and 24 sensor readings each. Open the interactive replay.](demo/adaptive-room-coverage-preview.gif)](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row)
 
-The opening replay compares the existing rollout with a policy that measures at least two distinct sites in each room. Both robots walk **156 steps** and take **24 readings**. Move the timeline to see their predictions and uncertainty after each reading, with the true field alongside. The experiment selector also opens the earlier [52-step greedy comparison](https://hwanggwan.github.io/spatial-exploration-ai/#greedy-rollout). To use the demo offline, download and open the [standalone HTML](demo/index.html).
+Both planners update the spatial covariance from their sensor readings before choosing where to measure next. One planner also reserves enough budget to measure at least two distinct sites in each room. In the opening replay, both start at the same point, walk **156 steps**, and take **24 readings**. Drag the timeline to see how their routes, predictions, and uncertainty evolve alongside the true field. [Standalone HTML](demo/index.html)
 
-Switch **Floor plan** to explore [three rooms in a row](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row) or a [four-room loop](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-loop). Each layout shows a selected paired replay with the same travel and reading counts.
+The two adaptive replays show selected fields where the room requirement improves both error measures. The floor-plan selector also includes the earlier corridor replay, which uses fixed range weights for planning. [Three rooms in a row](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-row) · [Four-room loop](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-loop) · [Corridor](https://hwanggwan.github.io/spatial-exploration-ai/#room-coverage-corridor)
 
 ## What we found
 
-**A room requirement improves coverage. Extra walking distance helps the robot reach useful sites inside those rooms.** Across eight layout/start pairs, the two-site requirement obtained at least two readings in every room on all eight 52-step routes, compared with zero of eight for the unconstrained rollout. At that budget, whole-map error was similar and short-zone error increased. At 104 and 156 steps, both map errors fell for both policies.
+**Requiring two readings per room slightly lowers mean map error in both layouts.** We compared both adaptive planners over **10,240 paired field and start combinations**, with shared caps of 156 steps and 24 readings. Each pair is scored on the same cells that neither route measured. The table reports the share of pairs where the requirement lowers RMSE and the mean change in RMSE.
 
-| Walking steps | Whole-map RMSE · existing / min. two | Short-zone RMSE · existing / min. two |
-| ---: | ---: | ---: |
-| 52 | 0.7435 / 0.7456 | 0.7977 / 0.8127 |
-| 104 | 0.6622 / 0.6451 | 0.7353 / 0.7243 |
-| 156 | 0.6259 / 0.6118 | 0.7030 / 0.6887 |
+| Floor plan | Dependence across walls | Whole-map win rate | Short-range win rate | Mean RMSE change, whole / short |
+| --- | --- | ---: | ---: | ---: |
+| Three rooms in a row | Weak | 53.7% | 54.0% | −0.0089 / −0.0128 |
+| Four-room loop | Weak | 34.7% | 33.6% | −0.0045 / −0.0040 |
+| Three rooms in a row | Strong | 54.7% | 53.1% | −0.0088 / −0.0082 |
+| Four-room loop | Strong | 34.9% | 33.6% | −0.0046 / −0.0050 |
 
-The table averages **448 paired corridor fields** with short- and long-range zones and weak cross-wall dependence. All six policies share a 24-reading cap and are evaluated on cells unmeasured by all six routes. For the six starts where the minimum-two policy took exactly 24 readings at both 104 and 156 steps, the longer route lowered short-zone RMSE by **0.0396** (paired 95% interval [−0.0498, −0.0291]). At 156 steps, the comparison between policies on starts where both took 24 readings had a whole-map RMSE difference of −0.0031 [−0.0102, +0.0039]. [Protocol and paired results](docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap)
-
-The replay shows one selected field where the room requirement improves whole-map RMSE from **0.721 to 0.673** and short-zone RMSE from **0.772 to 0.681**. Both routes use 156 steps and 24 readings, and the comparison scores the same 484 unmeasured cells. [See the true field and predicted maps](demo/room-coverage-maps.png).
+In the loop, the policies measure identical sites in about 37% of pairs and obtain the same RMSE. Among weak-wall pairs that measure different sites, the loop win rates are 54.8% and 53.0%. In the row layout, requiring two readings removes the 44 coverage misses seen in 3,072 unconstrained runs. Both layouts also show lower mean errors among route pairs that use all 156 steps and all 24 readings. [Protocol and paired results](docs/residential-floor-plan-study.md#updating-the-planning-covariance-at-each-reading)
 
 ### Earlier benchmarks
+
+On the corridor layouts with fixed range weights for planning, allowing more walking improved map accuracy under the 24-reading cap. The 52-, 104-, and 156-step results cover 448 paired fields. [Corridor budget study](docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap)
 
 On three unequal rooms, **priority allocation mapped the field more accurately than equal allocation while walking less**. Rollout had the lowest error at the shared budget cap and still improved on priority allocation when limited to the same actual walking distance.
 
@@ -55,7 +56,7 @@ The three Bayesian planners share that mapper:
 | **Priority allocation** | Gives more readings to rooms with more remaining uncertainty and lower entry cost, while reserving enough distance to reach them. |
 | **Rollout** | Tries each feasible next stop, simulates a greedy route to the end of the budget, and chooses the move with the lowest predicted final map variance. |
 
-The demo replays verified routes, predictions, and hypothetical observation updates from the benchmarks. The Bayesian planners use uncertainty updated from the locations measured so far. The learned planner also uses the acquired values to update which spatial pattern it expects. The simulator's true field is used for scoring and display. The 3D scene renders the synthetic 2D benchmark's floor plan and recorded moves.
+The 156-step adaptive planners use a shared mixture of spatial covariance models. With each sensor reading, they update the probabilities of the range patterns and condition the resulting covariance on the sites visited so far. The rollout evaluates possible continuations with that covariance and executes the first move. The 3D demo replays those decisions with the simulator's true field shown for scoring and display.
 
 ## Reproduce the benchmark
 
@@ -73,4 +74,4 @@ python tools/build_three_room_demo.py
 python -m unittest discover -s tests -v
 ```
 
-The [three-room report](docs/three-room-study.md) includes the full budget and field comparisons, room-level error, and route verification. The [demo notes](demo/README.md) list the additional commands for the 23 × 23 corridor scenes. The [experiment index](docs/experiments.md) covers earlier GP and DeepKriging comparisons, learned planning, and reproduction notes.
+The demo notes cover the adaptive and fixed-weight replay archives. The experiment index covers earlier GP and DeepKriging comparisons, learned planning, and reproduction notes. [Demo notes](demo/README.md) · [Three-room report](docs/three-room-study.md) · [Experiment index](docs/experiments.md)

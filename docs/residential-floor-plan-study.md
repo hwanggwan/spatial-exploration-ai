@@ -568,7 +568,7 @@ At 156 edges the two-per-room policy's whole-map difference relative to existing
 
 ### Additional floor plans in the replay
 
-The 156-step room-coverage replay also includes three rooms in a row and four rooms connected in a loop. Both comparisons use the same frozen mixture mapper, rollout score, and 24-reading cap. The constrained route requires two distinct readings in each physical room, including all four rooms in the loop. Each example uses a mixed-range field with weak cross-wall dependence and the same starting site for the two routes. The builder verifies the realized travel and reading counts and scores predictions on the 486 cells both routes leave unmeasured in each example.
+The first 156-step room-coverage replays also included three rooms in a row and four rooms connected in a loop, with the initial range weights held fixed during planning. Both comparisons use the same frozen mixture mapper, rollout score, and 24-reading cap. The constrained route requires two distinct readings in each physical room, including all four rooms in the loop. Each example uses a mixed-range field with weak cross-wall dependence and the same starting site for the two routes. Both routes leave the same 486 cells available for scoring in each example.
 
 | Selected replay | Whole-map RMSE, existing → minimum two | Short-zone RMSE, existing → minimum two |
 | --- | ---: | ---: |
@@ -576,3 +576,43 @@ The 156-step room-coverage replay also includes three rooms in a row and four ro
 | Four-room loop | 0.6020 → 0.5566 | 0.8921 → 0.7880 |
 
 The examples were selected from paired fields where the minimum-two policy improved both scores. They show how the routes behave in these layouts. The 448-field travel-budget benchmark above covers the corridor layouts.
+
+#### Repeated fields and starts on row and loop plans
+
+The benchmark uses two floor plans per family and four shared start positions per plan. For each plan and wall condition, it draws 32 new fields for each possible assignment of short and long ranges that includes both ranges. This gives six assignments for three rooms and fourteen for four rooms. Each field and its sensor noise are shared across four starts and both policies. The routes use the same fixed planning covariance as the replay. The frozen mixture mapper uses the acquired values to reconstruct each field. For a given plan and start, RMSE is evaluated on the same cells left unmeasured by both policies.
+
+| Floor plan | Cross-wall dependence | Field/start pairs | Whole-map wins | Short-zone wins | Mean whole-map change | Mean short-zone change |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Row | Weak | 1,536 | 802 (52.2%) | 810 (52.7%) | −0.00228 | −0.00911 |
+| Loop | Weak | 3,584 | 940 (26.2%) | 931 (26.0%) | −0.00104 | −0.00254 |
+| Row | Strong | 1,536 | 766 (49.9%) | 770 (50.1%) | −0.00161 | −0.00483 |
+| Loop | Strong | 3,584 | 903 (25.2%) | 956 (26.7%) | −0.00024 | −0.00229 |
+
+Wins count strictly lower RMSE. Changes are minimum-two minus existing rollout. All routes walk 156 steps, and all eight loop route pairs take 24 readings per policy. In the row, both routes take 24 readings in five of eight pairs. The other three pairs differ by one reading. For the matched row routes under weak cross-wall dependence, whole-map and short-zone win rates are 52.1% and 52.5%. Both policies meet the two-reading requirement at the end of every route under these budgets. The loop policies measure identical sites in four of the eight route pairs. Where their sites differ, the weak-wall win rates are 52.5% and 52.0%. For the loop replay's floor plan and start, the 448 new weak-wall fields yield mean whole-map and short-zone changes of +0.01302 and +0.01852.
+
+The weak-wall 95% bootstrap intervals for mean whole-map change are [−0.00559, +0.00100] for the row and [−0.00266, +0.00056] for the loop. Short-zone intervals are [−0.01392, −0.00442] and [−0.00508, −0.00002]. These intervals resample fields within each floor plan and range assignment, keeping the four starts of each field together. They quantify variability over fields for the tested floor plans and starts. On the fixed reserve of evaluation cells, weak-wall mean whole-map changes are −0.02002 for the row and −0.00653 for the loop. Mean nominal 95% interval coverage is 94.9–95.3% across the eight family, wall and policy combinations. Mean route planning time rises from 2.53 to 2.63 seconds for the row and from 2.88 to 2.94 seconds for the loop in this four-worker run.
+
+Run `PYTHONPATH=src .venv/bin/python tools/audit_residential_layout_coverage.py` to save per-field scores, route details, and subgroup summaries under `outputs/sensing-world-residential-layout-coverage`. The script uses the existing frozen mapper specification at `outputs/sensing-world-modes/frozen.json`.
+
+#### Updating the planning covariance at each reading
+
+The adaptive comparison reuses the exact fields, sensor noise, room layouts, starts, reserved sites, and 156-step and 24-reading caps of the fixed-planner benchmark. Both policies read the sensor at their shared start. After each subsequent reading, they update the probabilities of the spatial range profiles, average the profile covariances with those probabilities, and condition the resulting covariance on the sites sampled so far. The rollout holds that covariance during each hypothetical continuation and executes only the chosen next move. The constrained variant also checks whether the remaining budget permits at least two distinct readings in every room. The two policies use the same reconstruction model on their respective measurements.
+
+The main comparison scores the cells unmeasured by both policies on each paired run. The fixed reserve of hold-out cells and the subset where both policies use all 156 steps and all 24 readings are scored as sensitivity checks. The paired bootstrap resamples independently generated fields within each layout and range assignment and keeps the starts for a field together.
+
+| Floor plan | Cross-wall dependence | Field/start pairs | Whole-map wins | Short-zone wins | Mean whole-map change | Mean short-zone change |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Row | Weak | 1,536 | 825 (53.7%) | 829 (54.0%) | −0.00888 | −0.01282 |
+| Loop | Weak | 3,584 | 1,243 (34.7%) | 1,203 (33.6%) | −0.00449 | −0.00396 |
+| Row | Strong | 1,536 | 840 (54.7%) | 816 (53.1%) | −0.00881 | −0.00817 |
+| Loop | Strong | 3,584 | 1,250 (34.9%) | 1,203 (33.6%) | −0.00461 | −0.00502 |
+
+Changes are constrained minus unconstrained rollout. Every mean change in the table has a paired 95% interval below zero for the tested layouts and starts. Under weak cross-wall dependence, the short-zone intervals are [−0.01865, −0.00734] for row and [−0.00663, −0.00125] for loop. The fixed reserve shows mean improvements in all four comparisons for each RMSE measure.
+
+The two loop policies measure the same sites in 36.7% of weak-wall pairs and 36.9% of strong-wall pairs. Among weak-wall pairs with different measurement sites, the loop win rates are 54.8% and 53.0%. Both measures improve together on 653 of 1,536 weak-wall row pairs and 971 of 3,584 weak-wall loop pairs. Restricting the weak-wall results to routes that both use all 156 steps and 24 readings yields mean whole-map and short-zone changes of −0.00631 and −0.01175 over 972 row pairs and −0.00386 and −0.00327 over 2,908 loop pairs.
+
+The unconstrained policy misses the two-reading requirement in 44 of 3,072 row runs and meets it on both loop layouts in all 7,168 runs. The constrained policy meets it in all 10,240 runs. Across design and wall conditions, mean realized travel is 155.55–156.00 steps and mean realized readings are 23.50–23.95. Empirical coverage of nominal 95% intervals is 94.86–95.34%. Using the final faster implementation for draws 5–32, median planning time across the two wall conditions is 0.39 versus 0.57 seconds per row route and 0.48 versus 0.64 seconds per loop route across eight concurrent workers.
+
+The adaptive demo shows one field per family at exactly 156 steps and 24 readings for both routes. It selects examples with weak cross-wall dependence and lower RMSE on both measures under the room requirement. In the row replay the unconstrained policy takes one reading in the left room. Whole-map RMSE goes from 0.7231 to 0.6769 in the row replay and from 0.6505 to 0.6033 in the loop replay. The benchmark tables summarize all fields.
+
+`PYTHONPATH=src .venv/bin/python tools/audit_residential_adaptive_coverage.py` runs the benchmark and saves per-field and per-route checkpoints in `outputs/sensing-world-residential-adaptive-coverage`. Restart the same command to resume an interrupted run.

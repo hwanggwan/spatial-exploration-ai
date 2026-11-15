@@ -1,6 +1,6 @@
 # Field Routes
 
-Open the [live demo](https://hwanggwan.github.io/spatial-exploration-ai/) in a browser, or open `index.html` locally to use it offline. The **Room coverage** experiment lets you switch between three rooms off a corridor, three rooms in a row, and a four-room loop. Each layout shows a selected field where minimum-two-per-room rollout lowers whole-map and short-zone error. Both routes start together and use 156 walking steps and 24 readings. Replay RMSE uses cells unmeasured by both completed routes. The corridor layout includes aggregate benchmark scores, and the other layouts display scores for the chosen field. [Room-coverage benchmark](../docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap) · [Additional floor plans](../docs/residential-floor-plan-study.md#additional-floor-plans-in-the-replay)
+Open `index.html` locally for the offline replay. **Room coverage** opens with two adaptive rollouts on three rooms in a row, and **Floor plan** switches to a four-room loop. Both planners update covariance from each acquired sensor value. Each layout shows a selected gain under the room requirement at exactly 156 walking steps and 24 readings per route. A separate table summarizes the full benchmark for that layout. **Corridor · fixed range weights** opens the earlier corridor replay and benchmark. [Live demo](https://hwanggwan.github.io/spatial-exploration-ai/) · [Adaptive benchmark](../docs/residential-floor-plan-study.md#updating-the-planning-covariance-at-each-reading) · [Corridor benchmark](../docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap)
 
 Select **Greedy vs. rollout** for six replays on the same 23 × 23 grid spanning two corridor layouts and short, long, and mixed-range fields. **Shared budget caps** lets both planners run under the 52-step and 24-reading limits. **Same walking distance** replays the archived rollout up to greedy's stopping distance. The timeline aligns by walking steps, and the table below the scene reports aggregate results across the benchmark fields. [Corridor benchmark](../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid)
 
@@ -52,7 +52,11 @@ python tools/audit_residential_adaptive_rollout.py --oracle-short
 python tools/audit_residential_adaptive_rollout.py --match-oracle-bonus
 python tools/audit_residential_room_quota.py --minimum 2
 python tools/audit_residential_travel_budget.py
+python tools/audit_residential_layout_coverage.py
+python tools/audit_residential_adaptive_coverage.py
 python tools/build_three_room_demo.py
 ```
+
+The adaptive benchmark saves checkpoints and resumes with the same command after an interruption. The demo builder reads the completed adaptive archive, selects one resource-matched example per layout, and verifies its final RMSE against the archived field scores.
 
 The live demo is served by GitHub Pages from the `gh-pages` branch. That branch contains the standalone replay as `index.html` and a `.nojekyll` marker. To update it, regenerate the replay on `main` and copy the new HTML to the publishing branch, pointing the experiment links to the repository reports.

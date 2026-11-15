@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+from functools import lru_cache
 from itertools import permutations
 import json
 from pathlib import Path
@@ -80,6 +81,8 @@ class TwoReadingCompletion:
         self.single = {}
         self.double = {}
         self.local_next = {}
+        self.room_sites = {zone: np.flatnonzero(self.zones == zone) for zone in np.unique(self.zones)}
+        self.equivalent_exclusion = {}
         for room in self.rooms:
             inside = layout.room == room
             sites = np.flatnonzero(inside & allowed)
@@ -94,6 +97,9 @@ class TwoReadingCompletion:
             best_costs = np.take_along_axis(via_site, best_two, axis=1)
             exclude = np.arange(len(inside))[:, None, None] == sites[best_two[:, 0, :]][None, :, :]
             self.single[room] = np.where(exclude, best_costs[:, 1, :], best_costs[:, 0, :])
+            _, representatives, groups = np.unique(self.single[room].reshape(len(inside), -1),
+                                                   axis=0, return_index=True, return_inverse=True)
+            self.equivalent_exclusion[room] = representatives[groups]
 
             between = self.distances[np.ix_(sites, sites)].copy()
             np.fill_diagonal(between, np.inf)
@@ -103,6 +109,7 @@ class TwoReadingCompletion:
             local = self.distances[:, sites].copy()
             local[sites, np.arange(len(sites))] = np.inf
             self.local_next[room] = (local[:, :, None] + exits[None, :, :]).min(axis=1)
+        self.cached_costs = lru_cache(maxsize=2048)(self.minimum_costs)
 
     def ordered_cost(self, sites, new_zone, order, pending, excluded):
         downstream = None
@@ -132,26 +139,34 @@ class TwoReadingCompletion:
             inter_room = self.distances[np.ix_(self.portals[order[i-1]], ports)]
             downstream = (inter_room + cost[..., None, :]).min(axis=-1)
 
+    def minimum_costs(self, deficits, exclusions):
+        """Cache travel after the next reading, independent of the current site and budget."""
+        excluded = dict(zip(self.rooms, exclusions))
+        costs = np.zeros(len(self.zones))
+        for new_zone, group in self.room_sites.items():
+            pending = {room: max(deficit-int(room == new_zone), 0)
+                       for room, deficit in zip(self.rooms, deficits)}
+            needed = tuple(room for room in self.rooms if pending[room])
+            if needed:
+                costs[group] = np.minimum.reduce([
+                    self.ordered_cost(group, new_zone, order, pending, excluded)
+                    for order in permutations(needed)
+                ])
+        return costs
+
     def candidates(self, observed, current, sites, remaining, readings_left):
         seen_zones = self.zones[observed]
         counts = np.bincount(seen_zones, minlength=int(self.zones.max())+1)
-        excluded = {room: observed[seen_zones == room][0] for room in self.rooms if counts[room] == 1}
-        allowed = np.zeros(len(sites), dtype=bool)
-        for new_zone in np.unique(self.zones[sites]):
-            mask = self.zones[sites] == new_zone
-            group = sites[mask]
-            pending = {room: max(2-counts[room]-int(room == new_zone), 0) for room in self.rooms}
-            needed = tuple(room for room in self.rooms if pending[room])
-            if sum(pending.values()) > readings_left - 1:
-                continue
-            cost = self.distances[current, group]
-            if needed:
-                best = np.full(len(group), np.inf)
-                for order in permutations(needed):
-                    best = np.minimum(best, self.ordered_cost(group, new_zone, order, pending, excluded))
-                cost = cost + best
-            allowed[mask] = cost <= remaining + 1e-12
-        return allowed
+        deficits = tuple(max(2-counts[room], 0) for room in self.rooms)
+        if not any(deficits):
+            return self.distances[current, sites] <= remaining + 1e-12
+        exclusions = tuple(
+            self.equivalent_exclusion[room][observed[seen_zones == room][0]] if deficit == 1 else -1
+            for room, deficit in zip(self.rooms, deficits)
+        )
+        can_fill = np.isin(self.zones[sites], [room for room, deficit in zip(self.rooms, deficits) if deficit])
+        cost = self.distances[current, sites] + self.cached_costs(deficits, exclusions)[sites]
+        return ((sum(deficits) - can_fill <= readings_left - 1) & (cost <= remaining + 1e-12))
 
     def reserve(self, observed):
         prefix = np.asarray(observed, dtype=int)

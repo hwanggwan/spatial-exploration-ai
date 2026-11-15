@@ -114,6 +114,95 @@ def rollout_move(covariance, distances, current, candidates, remaining, remainin
     return best_first
 
 
+def rollout_move_fast(covariance, distances, current, candidates, remaining, remaining_readings, distance_cap,
+                  *, target_weights=None, can_complete=None):
+    """Score the same continuations using low-rank covariance updates for row norms."""
+    args = (covariance, distances, current, candidates, remaining, remaining_readings, distance_cap)
+    if target_weights is not None:
+        return rollout_move(*args, target_weights=target_weights, can_complete=can_complete)
+    rows = covariance[candidates]
+    costs = distances[current, candidates]
+    diagonal = covariance.diagonal()[candidates] + NOISE**2
+    mean_square = np.mean(rows**2, axis=1)
+    gains = mean_square / diagonal
+    norms = mean_square * len(covariance)
+    per_distance = np.argsort(-(gains / costs), kind="stable")
+    absolute = np.argsort(-gains, kind="stable")
+    if can_complete is not None:
+        legal = can_complete(current, candidates, remaining, remaining_readings, ())
+        per_distance = per_distance[legal[per_distance]]
+        absolute = absolute[legal[absolute]]
+        if not len(per_distance):
+            raise RuntimeError("No next measurement can complete the required observations")
+    shortlist = np.union1d(per_distance[:SHORTLIST_PER_SCORE], absolute[:SHORTLIST_PER_SCORE])
+    greedy = per_distance[0]
+    if len(shortlist) == 1:
+        return int(candidates[greedy])
+    # For C = C0 - U.T @ U, cache G0 = C0 @ C0, V = C0 @ U.T and U @ U.T.
+    # The Gram matrix includes every prediction cell, including unavailable candidates.
+    gram = rows @ rows.T
+    base = covariance[np.ix_(candidates, candidates)]
+    updates = np.empty((remaining_readings, len(candidates)))
+    projected = np.empty_like(updates)
+    inner = np.empty((remaining_readings, remaining_readings))
+    indices = np.arange(len(candidates))
+    best, best_score = None, -np.inf
+    for first in np.r_[greedy, shortlist[shortlist != greedy]]:
+        active = indices
+        position, depart, travel, score = first, current, 0., 0.
+        norm = norms.copy()
+        diag = diagonal.copy()
+        suffix = []
+        for k in range(remaining_readings):
+            action = candidates[position]
+            travel += distances[depart, action]
+            suffix.append(action)
+            gain = norm[position] / diag[position]
+            score += gain / len(covariance) * (1 - EARLY_WEIGHT + EARLY_WEIGHT * max(remaining - travel, 0.) / distance_cap)
+            if k + 1 == remaining_readings:
+                break
+            distance = distances[action, candidates[active]]
+            keep = (distance > 0) & (distance <= remaining - travel + 1e-12)
+            if not keep.any():
+                break
+            active = active[keep]
+            onward = distance[keep]
+            basis = updates[:k]
+            projection = projected[:k]
+            coefficients = basis[:, position].copy()
+            cov = base[position] - coefficients @ basis
+            cross = gram[position] - coefficients @ projection
+            product = projection[:, position] - inner[:k, :k] @ coefficients
+            gram_col = cross - product @ basis
+            # Squared row norms after subtracting the new scaled observation row.
+            denominator = diag[position]
+            multiplier = cov / denominator
+            norm += multiplier * (cov * gain - 2 * gram_col)
+            diag -= multiplier * cov
+            scale = np.sqrt(denominator)
+            updates[k] = cov / scale
+            projected[k] = cross / scale
+            inner[k, :k] = inner[:k, k] = product / scale
+            inner[k, k] = gain
+            density = norm[active] / (diag[active] * onward)
+            if can_complete is not None:
+                legal = can_complete(action, candidates[active], remaining - travel, remaining_readings - len(suffix), suffix)
+                if not legal.any():
+                    break
+                density[~legal] = -np.inf
+            largest = np.argmax(density)
+            # Preserve the direct planner's floating-point decision on close ties.
+            if np.count_nonzero(density >= density[largest] - 1e-12) > 1:
+                return rollout_move(*args, can_complete=can_complete)
+            position = active[largest]
+            depart = action
+        if abs(score - best_score - 1e-12) <= 1e-13:
+            return rollout_move(*args, can_complete=can_complete)
+        if score > best_score + 1e-12:
+            best, best_score = int(candidates[first]), score
+    return best
+
+
 def priority_weights(zone_weights, zones, *, short_zones=None):
     zone_scores = 1 + SHORT_BONUS * np.maximum(zone_weights - 0.5, 0)
     if short_zones is not None:
@@ -125,11 +214,12 @@ def priority_weights(zone_weights, zones, *, short_zones=None):
 
 
 def adaptive_route(layout, origin, allowed, sensor, kernels, profiles, profile_priors, log_prior, *,
-                   prioritize_short=False, oracle_profile=None, match_bonus=False):
+                   prioritize_short=False, oracle_profile=None, match_bonus=False, edge_cap=EDGES, completion=None,
+                   choose_move=rollout_move):
     sites = [origin]
     available = allowed.copy()
     travel = 0.0
-    distance_cap = EDGES / (layout.size - 1)
+    distance_cap = edge_cap / (layout.size - 1)
     trace = []
     values = [sensor(origin)]
     # A uniform oracle profile gives every cell the same weight.
@@ -157,8 +247,9 @@ def adaptive_route(layout, origin, allowed, sensor, kernels, profiles, profile_p
         covariance = conditional_covariance(prior, observed)
         if prioritize_short or short_zones is not None:
             target_weights = priority_weights(zone_weights, layout.room, short_zones=short_zones)
-        action = rollout_move(covariance, layout.distances, current, candidates, remaining, CAP-len(sites), distance_cap,
-                              target_weights=target_weights)
+        can_complete = completion.reserve(sites) if completion is not None else None
+        action = choose_move(covariance, layout.distances, current, candidates, remaining, CAP-len(sites), distance_cap,
+                              target_weights=target_weights, can_complete=can_complete)
         travel += layout.distances[current, action]
         sites.append(action)
         values.append(sensor(action))

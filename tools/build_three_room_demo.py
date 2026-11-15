@@ -150,6 +150,7 @@ def main():
     parser.add_argument("--rollout-replay", type=Path, default=ROOT / "outputs/sensing-world-rollout/replay.json")
     parser.add_argument("--refined-study", type=Path, default=ROOT / "outputs/sensing-world-residential-refined-rollout")
     parser.add_argument("--coverage-study", type=Path, default=ROOT / "outputs/sensing-world-residential-travel-budget")
+    parser.add_argument("--adaptive-study", type=Path, default=ROOT / "outputs/sensing-world-residential-adaptive-coverage")
     parser.add_argument("--output", type=Path, default=ROOT / "demo/index.html")
     args = parser.parse_args()
     template = (ROOT / "demo/index.template.html").read_text(encoding="utf8")
@@ -160,7 +161,8 @@ def main():
 
         refined = build_residential_replay(args.refined_study, ROOT)
         if args.coverage_study.is_dir():
-            refined["roomCoverage"] = build_room_coverage_replay(args.coverage_study, ROOT)
+            adaptive = args.adaptive_study if (args.adaptive_study / "protocol.json").is_file() else None
+            refined["roomCoverage"] = build_room_coverage_replay(args.coverage_study, ROOT, adaptive)
     replacements = {
         TOKEN: json.dumps(data, separators=(",", ":")),
         REFINED_DATA_TOKEN: json.dumps(refined, separators=(",", ":")),

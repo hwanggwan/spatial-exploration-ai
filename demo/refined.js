@@ -7,6 +7,10 @@ const coverageMethods = [
   {...refinedMethods[0], key:"quarter_156", label:"Existing rollout"},
   {...refinedMethods[1], key:"room_quota_two_156", label:"Minimum two per room"}
 ];
+const adaptiveMethods = [
+  {...coverageMethods[0], label:"Adaptive rollout"},
+  coverageMethods[1]
+];
 const refinedNames = {short:"Short range", mixed:"Mixed by area", long:"Long range"};
 const refinedZones = ["Lower-left room","Lower-right room","Corridor","Upper room"];
 const refinedSlider = byId("refined-step");
@@ -14,8 +18,9 @@ const refinedPlay = byId("refined-play");
 const refinedStudy = byId("refined-study");
 const coverageLayout = byId("coverage-layout");
 const coverageScenes = refinedData?.roomCoverage ? [refinedData.roomCoverage,...(refinedData.roomCoverage.alternatives ?? [])] : [];
+const defaultCoverage = coverageScenes.find(scene=>scene.adaptive) ?? coverageScenes[0];
 let refinedScene, refinedLayout, refinedLimit, refinedExtent, refinedCeiling, refinedPosition=0, refinedAnimation=null;
-let showingRoomCoverage;
+let showingRoomCoverage, mountedMethods;
 let refinedViews=[], refinedTruth;
 
 function stopRefined(){
@@ -60,6 +65,19 @@ function mountRefined(methods){
 
 function showCoverageResults(){
   const {fields,scores,evaluationCells}=refinedScene;
+  if(refinedScene.adaptive){
+    const fmt=(wins,cases,delta)=>`${(100*wins/cases).toFixed(1)}% <small>Δ ${delta.toFixed(4)}</small>`;
+    const rows=refinedScene.benchmark.map(({regime,cases,whole,short,wholeDelta,shortDelta})=>`<tr>
+      <th scope="row">${regime==="weak" ? "Weak" : "Strong"} <small>${cases.toLocaleString("en-US")} pairs</small></th>
+      <td>${fmt(whole,cases,wholeDelta)}</td><td>${fmt(short,cases,shortDelta)}</td></tr>`).join("");
+    byId("refined-result-title").textContent="Adaptive rollout benchmark";
+    byId("refined-results").innerHTML=`<thead><tr><th scope="col">Across walls</th><th scope="col">Whole map</th>
+      <th scope="col">Short-range areas</th></tr></thead><tbody>${rows}</tbody>`;
+    byId("refined-result-note").textContent="Percent of runs with lower RMSE under the room requirement. Δ gives the mean change.";
+    const [before,after]=refinedScene.shortScores.map(value=>value.toFixed(4));
+    byId("refined-result-detail").textContent=`This replay shows one selected field where the rule improves both scores. Short-range RMSE drops from ${before} to ${after} over the shared unmeasured cells.`;
+    return;
+  }
   if(!scores){
     const rows=coverageMethods.map(({key,label},i)=>`<tr><th scope="row">${label}</th>
       <td>${refinedScene.plans[key].rmse.at(-1).toFixed(4)}</td><td>${refinedScene.shortScores[i].toFixed(4)}</td></tr>`).join("");
@@ -104,23 +122,27 @@ function showRefinedResults(matched){
 function loadRefined(){
   stopRefined();
   const coverage=Boolean(refinedData.roomCoverage && refinedStudy.value==="coverage");
-  if(coverage!==showingRoomCoverage){
-    showingRoomCoverage=coverage;
-    mountRefined(coverage ? coverageMethods : refinedMethods);
-  }
+  showingRoomCoverage=coverage;
   byId("refined-selects").classList.toggle("coverage-controls",coverage);
   byId("coverage-layout-label").hidden=!coverage || coverageScenes.length<=1;
   document.querySelectorAll("[data-greedy-control]").forEach(label=>label.hidden=coverage);
-  byId("refined-left-label").textContent=coverage ? "Existing rollout only" : "Greedy only";
-  byId("refined-right-label").textContent=coverage ? "Minimum two only" : "Rollout only";
   const layout=Number(byId("refined-layout").value), scenario=byId("refined-field").value;
   const matched=!coverage && byId("refined-budget").value==="matched";
-  refinedScene=coverage ? coverageScenes.find(scene=>scene.id===coverageLayout.value) ?? coverageScenes[0]
+  refinedScene=coverage ? coverageScenes.find(scene=>scene.id===coverageLayout.value) ?? defaultCoverage
     : refinedData.cases.find(c=>c.layout===layout && c.scenario===scenario);
+  const methods=coverage ? (refinedScene.adaptive ? adaptiveMethods : coverageMethods) : refinedMethods;
+  if(methods!==mountedMethods){
+    mountRefined(methods);
+    mountedMethods=methods;
+  }
+  byId("refined-left-label").textContent=`${methods[0].label} only`;
+  byId("refined-right-label").textContent=coverage ? "Minimum two only" : "Rollout only";
+  const studyPath="../docs/residential-floor-plan-study.md";
   byId("refined-report").href=coverage
-    ? (refinedScene.scores ? "../docs/residential-floor-plan-study.md#increasing-the-walking-budget-with-a-fixed-reading-cap"
-                            : "../docs/residential-floor-plan-study.md#additional-floor-plans-in-the-replay")
-    : "../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid";
+    ? (refinedScene.adaptive ? `${studyPath}#updating-the-planning-covariance-at-each-reading`
+      : refinedScene.scores ? `${studyPath}#increasing-the-walking-budget-with-a-fixed-reading-cap`
+                            : `${studyPath}#additional-floor-plans-in-the-replay`)
+    : `${studyPath}#remaining-budget-rollout-on-the-refined-grid`;
   refinedLayout=coverage ? refinedScene.layout : refinedData.layouts[layout];
   refinedLimit=coverage ? refinedScene.travel : matched ? refinedScene.cutoff : refinedData.travel;
   const plans=Object.values(refinedScene.plans);
@@ -134,7 +156,9 @@ function loadRefined(){
   byId("scale-min").textContent=(-refinedExtent).toFixed(1);
   byId("scale-max").textContent=refinedExtent.toFixed(1);
   byId("refined-explanation").textContent=coverage
-    ? "Both routes walk 156 steps and take 24 readings. Compare how they distribute readings across rooms."
+    ? (refinedScene.adaptive
+      ? "Both planners update their covariance from each sensor reading before choosing where to measure next."
+      : "Both planners update uncertainty at measured locations using fixed weights for short and long ranges.")
     : matched ? "The original rollout is replayed up to greedy’s walking distance. Drag any view to rotate together."
               : "Both routes start together and use the same caps. Drag any view to rotate together.";
   if(coverage){
@@ -201,9 +225,12 @@ function seekRefined(step){
 byId("refined-study-label").hidden=!refinedData?.roomCoverage;
 byId("refined-selects").classList.toggle("has-study-selector",Boolean(refinedData?.roomCoverage));
 refinedStudy.value=refinedData?.roomCoverage && location.hash!=="#greedy-rollout" ? "coverage" : "greedy";
-coverageLayout.replaceChildren(...coverageScenes.map(scene=>new Option(scene.label,scene.id)));
-const requestedLayout=location.hash.slice("#room-coverage-".length);
-if(coverageScenes.some(scene=>scene.id===requestedLayout)) coverageLayout.value=requestedLayout;
+const floorPlans=defaultCoverage?.adaptive ? [...coverageScenes.slice(1),coverageScenes[0]] : coverageScenes;
+coverageLayout.replaceChildren(...floorPlans.map(scene=>new Option(
+  scene.id==="corridor" && defaultCoverage?.adaptive ? "Corridor · fixed range weights" : scene.label, scene.id)));
+const prefix="#room-coverage-";
+const requestedLayout=location.hash.startsWith(prefix) ? location.hash.slice(prefix.length) : "";
+if(defaultCoverage) coverageLayout.value=coverageScenes.find(scene=>scene.id===requestedLayout)?.id ?? defaultCoverage.id;
 ["refined-study","refined-layout","refined-field","refined-budget","coverage-layout"].map(byId).forEach(
   element=>element.addEventListener("change",loadRefined));
 refinedSlider.addEventListener("input",()=>seekRefined(Number(refinedSlider.value)));
