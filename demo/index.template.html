@@ -236,11 +236,16 @@ h1{font-size:clamp(34px,5vw,54px);font-weight:720;line-height:1.04;letter-spacin
 <p><strong>How to read the replay.</strong> The timeline aligns reading counts. In 3D, the robot walks each archived path between readings. Finished routes stay on their last frame. Hold-out RMSE uses 28 never-sensed sites; uncertainty shows model standard deviation. <a href="../docs/three-room-study.md">Experiment notes</a></p>
 </div>
 <p class="sr" id="status" role="status"></p>
-<noscript><p>Enable JavaScript to play the offline replay.</p></noscript>
+<noscript><p>Open the <a href="./index.html">standalone replay</a> with JavaScript enabled.</p></noscript>
 </main>
 <script id="replay-data" type="application/json">__BENCHMARK_REPLAY_DATA__</script>
 <script id="refined-data" type="application/json">__REFINED_REPLAY_DATA__</script>
 <script>
+if (document.querySelector("#replay-data").textContent.trimStart().startsWith("__")) {
+  window.location.replace("./index.html");
+}
+</script>
+<script id="replay-app" type="__REPLAY_SCRIPT_TYPE__">
 "use strict";
 const data = JSON.parse(document.querySelector("#replay-data").textContent);
 const refinedData = JSON.parse(document.querySelector("#refined-data").textContent);

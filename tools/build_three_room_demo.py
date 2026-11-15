@@ -18,6 +18,7 @@ TOKEN = "__BENCHMARK_REPLAY_DATA__"
 WORLD_TOKEN = "__WORLD_RENDERER__"
 REFINED_TOKEN = "__REFINED_RENDERER__"
 REFINED_DATA_TOKEN = "__REFINED_REPLAY_DATA__"
+SCRIPT_TYPE_TOKEN = "__REPLAY_SCRIPT_TYPE__"
 
 
 def build_data(source, learned_replay=None, rollout_replay=None):
@@ -162,6 +163,7 @@ def main():
         REFINED_DATA_TOKEN: json.dumps(refined, separators=(",", ":")),
         WORLD_TOKEN: (ROOT / "demo/world.js").read_text(encoding="utf8"),
         REFINED_TOKEN: (ROOT / "demo/refined.js").read_text(encoding="utf8"),
+        SCRIPT_TYPE_TOKEN: "text/javascript",
     }
     for placeholder, content in replacements.items():
         if template.count(placeholder) != 1:

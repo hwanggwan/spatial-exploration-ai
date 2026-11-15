@@ -2,7 +2,7 @@
 
 Open the [live demo](https://hwanggwan.github.io/spatial-exploration-ai/) in a browser, or open `index.html` locally to use it offline. The **3D corridor comparison** shows greedy and rollout on the 23 × 23 grid with the true field alongside. It has six replays spanning two corridor layouts and short, long, and mixed-range fields. **Shared budget caps** lets both planners run under the 52-step and 24-reading limits. **Same walking distance** replays the archived rollout up to greedy's stopping distance. The timeline aligns by walking steps, and the table below the scene reports aggregate results across the benchmark fields. [Corridor benchmark](../docs/residential-floor-plan-study.md#remaining-budget-rollout-on-the-refined-grid)
 
-The two top-down uncertainty maps show posterior standard deviation at the current step on a shared scale. Dots mark the readings taken so far.
+The two top-down uncertainty maps show posterior standard deviation at the current step on a shared scale. Dots mark the readings taken so far. The README's animated preview includes both uncertainty maps.
 
 **World model vs. GP** shows the earlier 26-step, 16-reading comparison. Its timeline aligns by measurement count. Stop colors distinguish shared locations from sites that only one planner has measured at the current frame.
 
